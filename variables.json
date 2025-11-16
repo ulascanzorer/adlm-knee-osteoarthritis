@@ -1,0 +1,57 @@
+{
+    "VARIABLES": {
+        "WOMAC": [
+            "V00WOMTSR", "V00WOMTSL"
+        ],
+        "KOOS": [
+            "V00KOOSKPL", "V00KOOSKPR",
+            "V00KOOSYML", "V00KOOSYMR", "V00KOOSQOL"
+        ],
+        "SURGERY": [
+            "P01KSURGL", "P01KSURGR",
+            "P02KSURGCV"
+        ],
+        "JOINT_SPACE_NARROWING": [
+            "P01SVLKJSL", "P01SVLKJSM",
+            "P01SVRKJSL", "P01SVRKJSM"
+        ],
+        "OSTEOPHYTES": [
+            "P01SVLKOST", "P01SVRKOST"
+        ]
+    },
+    "VARIABLE_DESCRIPTIONS": {
+        "V00WOMTSR": "Right knee WOMAC total score (calculated).",
+        "V00WOMTSL": "Left knee WOMAC total score (calculated).",
+    
+        "V00KOOSFSR": " KOOS Function in Sport and Recreation Score (calculated)(deleted).",
+        "V00KOOSKPL": "Left knee KOOS Pain Score (calculated).",
+        "V00KOOSKPR": "Right knee KOOS Pain Score (calculated).",
+        "V00KOOSYML": "Left knee KOOS Symptoms Score (calculated).",
+        "V00KOOSYMR": "Right knee KOOS Symptoms Score (calculated).",
+        "V00KOOSQOL": "KOOS Quality of Life Score (calculated).",
+        
+        "P01KRSL": "Left knee ever had replacement (total or partial)(deleted).",
+        "P01KRSR": "Right knee ever had replacement (total or partial)(deleted).",
+
+        "P01KSURGL": "Left knee ever had surgery or arthroscopy.",
+        "P01KSURGR": "Right knee ever had surgery or arthroscopy.",
+
+        "P01MENL": "Left knee ever had meniscectomy (cartilage surgery)(deleted).",
+        "P01MENR": "Right knee ever had meniscectomy (cartilage surgery)(deleted).",
+
+        "P01LRL": "Left knee ever had ligament repair surgery.(deleted)",
+        "P01LRR": "Right knee ever had ligament repair surgery.(deleted)",
+
+        "P02KSURGCV": "Either knee, ever had knee replacement .",
+
+        "P01SVLKJSL": "Left knee x-ray: lateral joint space narrowing (calc).",
+        "P01SVLKJSM": "Left knee x-ray: medial joint space narrowing (calc).",
+        "P01SVRKJSL": "Right knee x-ray: lateral joint space narrowing (calc).",
+        "P01SVRKJSM": "Right knee x-ray: medial joint space narrowing (calc).",
+
+        "P01SVLKOST": "Left knee x-ray: evidence of osteophytes (calc).",
+        "P01SVRKOST": "Right knee x-ray: evidence of osteophytes (calc)."
+    }
+}
+
+
