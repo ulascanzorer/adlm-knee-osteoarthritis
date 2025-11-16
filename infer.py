@@ -6,7 +6,7 @@ from cluster import run_kmeans, clusters_stats
 import pandas as pd
 # Path to your weights
 weights_path = "RadImageNet_weights/ResNet50.pt"
-tabular_path="data/clinical00_cleaned.csv"
+tabular_path = "csv/clinical00_cleaned.csv"
 
 # Load model
 state_dict = torch.load(weights_path, map_location="cpu")
@@ -21,7 +21,7 @@ model = nn.Sequential(*list(model.children())[:-1])
 model.eval()
 
 # Process an entire folder of MRIs
-data_folder = "data/mri_test/mri_only"
+data_folder = "/vol/miltank/projects/practical_wise2526/knee-osteoarthritis-severity/data/mri_only/mri_only"
 print(f"Loading MRIs from {data_folder}...")
 patients_tensors = load_mri_folder(data_folder)
 
@@ -48,6 +48,7 @@ print(f"Final feature tensor shape: {all_patient_features.shape}") #(num_patient
 
 #now we can run k-means clustering on the extracted features
 df_clusters = run_kmeans(patients_features, k=4)
-#then we can compute the cluster statistics
-df_clinical = pd.read_csv(tabular_path)
-df_cluster_stats = clusters_stats(df_clusters, df_clinical)
+
+clusters_out_path = "csv/mri_clusters.csv"
+df_clusters.to_csv(clusters_out_path, index=False)
+print(f"Saved cluster assignments to {clusters_out_path}")

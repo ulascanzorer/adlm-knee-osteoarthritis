@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
-from score import compute_symptoms_score, compute_structure_score, compute_surgery_score
+from score import compute_symptoms_score, compute_structure_score, compute_surgery_score, compute_surgery_percentages, compute_kl_left_distribution, compute_kl_right_distribution
 
     
 #we need to find the optimal number of clusters k for k-means clustering
@@ -38,11 +38,12 @@ def clusters_stats(df_clusters, df_clinical):
     score_funcs = {
         "symptoms": compute_symptoms_score,
         "structure": compute_structure_score,
-        "surgery": compute_surgery_score
+        "surgery": compute_surgery_score,
     }
+
     df_clusters["ID"] = df_clusters["ID"].astype(int)
     df_clinical["ID"] = df_clinical["ID"].astype(int)
-    
+
     merged = df_clinical.merge(df_clusters, on="ID", how="inner")
     results = []
 
@@ -50,12 +51,27 @@ def clusters_stats(df_clusters, df_clinical):
         sym = score_funcs["symptoms"](group)
         struct = score_funcs["structure"](group)
         surg = score_funcs["surgery"](group)
-        results.append({
+        surgery_pct_yes, surgery_pct_no = compute_surgery_percentages(group)
+
+        kl_left_counts  = compute_kl_left_distribution(group)
+        kl_right_counts = compute_kl_right_distribution(group)
+
+        row = {
             "cluster": cluster_id,
             "SYMPTOMS_SCORE": sym,
             "STRUCTURE_SCORE": struct,
             "SURGERY_SCORE": surg,
-            "N_PATIENTS": len(group)
-        })
+            "N_PATIENTS": len(group),
+            "SURGERY_PCT_YES": surgery_pct_yes,
+            "SURGERY_PCT_NO": surgery_pct_no,
+        }
+
+        # add KL counts to the row
+        for grade in [0, 1, 2, 3, 4]:
+            row[f"KL_LEFT_{grade}_PCT"] = kl_left_counts.loc[grade] / len(group)
+            row[f"KL_RIGHT_{grade}_PCT"] = kl_right_counts.loc[grade] / len(group)
+            
+
+        results.append(row)
 
     return pd.DataFrame(results)

@@ -54,3 +54,46 @@ def compute_surgery_score(patients_df, variables=variables):
     flattened = patients_df[cols].to_numpy().flatten()
     mode_val = stats.mode(flattened, keepdims=True).mode[0]
     return int(mode_val)
+
+def compute_surgery_percentages(patients_df, variables=variables):
+    """
+    Compute percentage of 0/1 surgery values in the cluster.
+
+    This looks at all surgery columns in VARIABLES["SURGERY"],
+    flattens them, and computes:
+        % of entries == 1 (yes)
+        % of entries == 0 (no)
+    """
+    cols = variables["VARIABLES"]["SURGERY"]
+    vals = patients_df[cols].to_numpy().flatten()
+
+    s = pd.Series(vals)
+    counts = s.value_counts(dropna=True)
+
+    n_yes = counts.get(1, 0)
+    n_no  = counts.get(0, 0)
+    total = n_yes + n_no
+
+    if total == 0:
+        return 0.0, 0.0  
+
+    pct_yes = n_yes / total * 100.0
+    pct_no  = n_no  / total * 100.0
+    return pct_yes, pct_no
+
+def compute_kl_left_distribution(patients_df, variables=variables):
+    """
+    Return counts of KL grades 0-4 for the left knee in this cluster.
+    """
+    left_col = variables["VARIABLES"]["KL_GRADE"][0]
+    vc = patients_df[left_col].value_counts(dropna=True)
+    return vc.reindex([0, 1, 2, 3, 4], fill_value=0).astype(int)
+
+
+def compute_kl_right_distribution(patients_df, variables=variables):
+    """
+    Return counts of KL grades 0-4 for the right knee in this cluster.
+    """
+    right_col = variables["VARIABLES"]["KL_GRADE"][1]
+    vc = patients_df[right_col].value_counts(dropna=True)
+    return vc.reindex([0, 1, 2, 3, 4], fill_value=0).astype(int)
