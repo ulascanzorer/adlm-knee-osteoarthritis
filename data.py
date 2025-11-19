@@ -1,56 +1,101 @@
-from torchvision import transforms
-from PIL import Image
-import numpy as np
 import os
+import tarfile
+import tempfile
+import shutil
+import numpy as np
 import torch
-from collections import defaultdict
+import pydicom
+from PIL import Image
+from torchvision import transforms
 
-transform = transforms.Compose([
-    transforms.Resize((224, 224)),     # standard RadImageNet input size
+# standard normalization for MedicalNet input
+transform_2d = transforms.Compose([
+    transforms.Resize((224, 224)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                         std=[0.229, 0.224, 0.225]) #normalisation of the ImageNet dataset
-                                                    # as RadImageNet is based on ImageNet
+    transforms.Normalize(mean=[0.5], std=[0.5])  # 3D MedicalNet models expect normalized grayscale volumes
 ])
 
-def preprocess_mri_image(img_path):
-    img = Image.open(img_path).convert('L')  # makes sure you are working with grayscale
-                                             # in case the image has an alpha channel
-    img = np.stack((np.array(img),)*3, axis=-1)  # now the image has one channel
-                                                 # radimagenet takes 3 channel images as input so we triplicate the input on
-                                                 # all 3 channels
-    img = Image.fromarray(img.astype(np.uint8)) #we cast the object to uint values in the [0-255] range
-                                                # and we conveer the array back to a pil image
-    return transform(img).unsqueeze(0) #finally we can apply the transformations we need
-    # i have a [1,3,224,224] tensor now
-
-def load_mri_folder(folder_path):
+def reconstruct_mri_from_tar(tar_path):
     """
-    Recursively loads all MRI images from a folder structure like:
-    data/mri_only/mri_only/{subset}/{patient_id}/...
+    Opens a .tar.gz MRI archive, extracts all DICOM slices, reconstructs
+    the 3D volume, normalizes intensities, resizes slices to 224×224,
+    and returns a torch tensor of shape [1, D, 224, 224].
     """
-    patient_tensors = defaultdict(list)
 
-    for root, _, files in os.walk(folder_path):
-        #os.walk traverses all the subdirectories in folder_path
-        for f in files:
-            path = os.path.join(root, f)
-            # Extract patient ID = last numeric folder in the path
-            parts = path.split(os.sep)
-            patient_id = next((p for p in parts if p.isdigit()), None)
-            try:
-                tensor = preprocess_mri_image(path)
-                patient_tensors[patient_id].append(tensor)
-            except Exception as e:
-                print(f"Skipping {path} due to error: {e}")
+    temp_dir = tempfile.mkdtemp()
+    try:
+        #Extract DICOMs
+        with tarfile.open(tar_path, "r:gz") as tar:
+            tar.extractall(path=temp_dir)
 
-                
-    #so now i have a dictionary where keys are patient ids and values are lists of tensors
-    #"9000099": [tensor_1, tensor_2, tensor_3],
-    #"9000456": [tensor_4, tensor_5],
-    for p_id in list(patient_tensors.keys()):
-        patient_tensors[p_id] = torch.cat(patient_tensors[p_id], dim=0)
-    #once i am done with this loop i have a dictionary where keys are patient ids and values are
-    #"9000099": tensor of shape [n,3,224,224] where n is the number of MRIs for that patient
-    
+        # Collect DICOM files
+        dicom_files = []
+        for root, _, files in os.walk(temp_dir):
+            for f in files:
+                dicom_files.append(os.path.join(root, f))
+        # Read and sort by InstanceNumber / SliceLocation
+        dicoms = [pydicom.dcmread(f) for f in dicom_files]
+        dicoms.sort(key=lambda d: getattr(d, "InstanceNumber", getattr(d, "SliceLocation", 0)))
+
+        # Stack into 3D volume (D, H, W) where D is the number of slices and H,W are height and width of each slice
+        volume = np.stack([d.pixel_array for d in dicoms], axis=0).astype(np.float32)
+
+        # Normalize intensities these make sure every 
+        # pixel value is in [0, 1] range and every slice matches the model’s expected resolution.
+        volume -= volume.min()
+        if volume.max() > 0:
+            volume /= volume.max()
+
+        # Resize each slice to 224×224
+        resized_slices = []
+        for i in range(volume.shape[0]):
+            img = Image.fromarray((volume[i] * 255).astype(np.uint8))
+            img = transform_2d.transforms[0](img)  # only resize here
+            resized_slices.append(np.array(img))
+        volume = np.stack(resized_slices, axis=0)
+
+        # Convert to torch tensor [1, D, 224, 224]
+        volume = torch.tensor(volume, dtype=torch.float32)
+        volume = volume.unsqueeze(0)  # add channel dim
+
+        # Normalize to [-1, 1] for consistency with MedicalNet
+        volume = (volume - 0.5) / 0.5
+        return volume  # [1, D, 224, 224]
+
+    except Exception as e:
+        print(f"Error reconstructing {tar_path}: {e}")
+        return None
+
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def load_mri_dataset(dataset_root, side="left"):
+    """
+    Recursively loads one MRI (3D tensor) per patient from:
+    cleaned_images_baseline/{subset}/{patient_id}/mri/{side}/
+    Returns: dict {patient_id: tensor [1, D, 224, 224]}
+    """
+
+    patient_tensors = {}
+    subset_dirs = [d for d in os.listdir(dataset_root) if os.path.isdir(os.path.join(dataset_root, d))]
+
+    for subset in subset_dirs:
+        subset_path = os.path.join(dataset_root, subset)
+        for patient_id in os.listdir(subset_path):
+            patient_path = os.path.join(subset_path, patient_id)
+            mri_side_dir = os.path.join(patient_path, "mri", side)
+
+            if not os.path.isdir(mri_side_dir):
+                continue  # skip if no MRI or no chosen side
+
+            tar_files = [f for f in os.listdir(mri_side_dir) if f.endswith(".tar.gz")]
+            if not tar_files:
+                continue
+
+            tar_path = os.path.join(mri_side_dir, tar_files[0])
+            tensor = reconstruct_mri_from_tar(tar_path)
+            if tensor is not None:
+                patient_tensors[patient_id] = tensor
+
     return patient_tensors
