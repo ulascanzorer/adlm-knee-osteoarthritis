@@ -5,6 +5,7 @@ import pandas as pd
 import sys,os
 from data import iter_mri_dataset
 from cluster import run_kmeans
+from tsne_visualization import tsne_plot, tsne_plot_with_k_means_clustering
 
 sys.path.append(os.path.abspath("MedicalNet"))
 from models.resnet import resnet50
@@ -54,6 +55,10 @@ def main(args):
     print(f"Final feature tensor shape: {all_patient_features.shape}")
 
     df_clusters = run_kmeans(patients_features, k=4)
+
+    # Also perform tsne visualization here.
+    tsne_plot_with_k_means_clustering(patients_features, n_components=3)
+
     os.makedirs("csv", exist_ok=True)
     out_path = os.path.join("csv", f"mri_clusters_{args.side}.csv")
     df_clusters.to_csv(out_path, index=False)
