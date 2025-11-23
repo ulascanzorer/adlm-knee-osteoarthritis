@@ -70,24 +70,29 @@ def reconstruct_mri_from_tar(tar_path):
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
-def load_mri_dataset(dataset_root, side="left"):
+def iter_mri_dataset(dataset_root, side="left", max_patients=None):
     """
-    Recursively loads one MRI (3D tensor) per patient from:
-    cleaned_images_baseline/{subset}/{patient_id}/mri/{side}/
-    Returns: dict {patient_id: tensor [1, D, 224, 224]}
+    Generator that yields (patient_id, tensor[1, D, 224, 224])
+    one by one instead of storing everything in memory.
     """
+    subset_dirs = [
+        d for d in os.listdir(dataset_root)
+        if os.path.isdir(os.path.join(dataset_root, d))
+    ]
 
-    patient_tensors = {}
-    subset_dirs = [d for d in os.listdir(dataset_root) if os.path.isdir(os.path.join(dataset_root, d))]
+    count = 0
 
     for subset in subset_dirs:
         subset_path = os.path.join(dataset_root, subset)
         for patient_id in os.listdir(subset_path):
+            if max_patients is not None and count >= max_patients:
+                return
+
             patient_path = os.path.join(subset_path, patient_id)
             mri_side_dir = os.path.join(patient_path, "mri", side)
 
             if not os.path.isdir(mri_side_dir):
-                continue  # skip if no MRI or no chosen side
+                continue
 
             tar_files = [f for f in os.listdir(mri_side_dir) if f.endswith(".tar.gz")]
             if not tar_files:
@@ -96,6 +101,5 @@ def load_mri_dataset(dataset_root, side="left"):
             tar_path = os.path.join(mri_side_dir, tar_files[0])
             tensor = reconstruct_mri_from_tar(tar_path)
             if tensor is not None:
-                patient_tensors[patient_id] = tensor
-
-    return patient_tensors
+                count += 1
+                yield patient_id, tensor   

@@ -1,20 +1,23 @@
+import json
+
 import numpy as np
 import pandas as pd
 from scipy import stats
-import json
 
 
-# Load the JSON file
-with open('variables.json', 'r') as file:
-	variables = json.load(file)
+# Load the JSON file with variable definitions
+with open("variables.json", "r") as file:
+    variables = json.load(file)
 
 
 def compute_symptoms_score(patients_df, variables=variables):
     """
     Compute the mean Symptoms score for a set of patients in a cluster.
+
     Inputs:
         patients_df: DataFrame containing patient data
         variables: dict containing 'WOMAC' and 'KOOS' lists
+
     Returns:
         float (cluster mean of symptoms, higher = worse)
     """
@@ -22,7 +25,6 @@ def compute_symptoms_score(patients_df, variables=variables):
     vals = patients_df[cols].mean(axis=1)  # patient-level means
     cluster_score = 100 - vals.mean()      # invert and average
     return cluster_score
-
 
 
 def compute_structure_score(patients_df, variables=variables):
@@ -34,7 +36,10 @@ def compute_structure_score(patients_df, variables=variables):
     Returns:
         int (0, 1, or 2)
     """
-    cols = variables["VARIABLES"]["JOINT_SPACE_NARROWING"] + variables["VARIABLES"]["OSTEOPHYTES"]
+    cols = (
+        variables["VARIABLES"]["JOINT_SPACE_NARROWING"]
+        + variables["VARIABLES"]["OSTEOPHYTES"]
+    )
     # Flatten all values for all patients and variables
     flattened = patients_df[cols].to_numpy().flatten()
     mode_val = stats.mode(flattened, keepdims=True).mode[0]
@@ -44,9 +49,11 @@ def compute_structure_score(patients_df, variables=variables):
 def compute_surgery_score(patients_df, variables=variables):
     """
     Compute the dominant (mode) Surgery score (0 or 1) for the cluster.
+
     Inputs:
         patients_df: DataFrame
         variables: dict containing 'SURGERY' list
+
     Returns:
         int (0 or 1)
     """
@@ -54,6 +61,7 @@ def compute_surgery_score(patients_df, variables=variables):
     flattened = patients_df[cols].to_numpy().flatten()
     mode_val = stats.mode(flattened, keepdims=True).mode[0]
     return int(mode_val)
+
 
 def compute_surgery_percentages(patients_df, variables=variables):
     """
@@ -71,15 +79,16 @@ def compute_surgery_percentages(patients_df, variables=variables):
     counts = s.value_counts(dropna=True)
 
     n_yes = counts.get(1, 0)
-    n_no  = counts.get(0, 0)
+    n_no = counts.get(0, 0)
     total = n_yes + n_no
 
     if total == 0:
-        return 0.0, 0.0  
+        return 0.0, 0.0
 
     pct_yes = n_yes / total * 100.0
-    pct_no  = n_no  / total * 100.0
+    pct_no = n_no / total * 100.0
     return pct_yes, pct_no
+
 
 def compute_kl_left_distribution(patients_df, variables=variables):
     """
