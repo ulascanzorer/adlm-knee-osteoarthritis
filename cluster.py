@@ -5,21 +5,22 @@ from sklearn.cluster import KMeans
 from score import (
     compute_symptoms_score,
     compute_structure_score,
-    compute_surgery_score,
     compute_surgery_percentages,
-    compute_kl_left_distribution,
-    compute_kl_right_distribution,
+    compute_kl_distribution,
 )
 
 
 # Predefined number of clusters which corresponds to the KL grading
-def run_kmeans(patients_features, k=4):
+def run_kmeans(patients_features, k: int = 4) -> pd.DataFrame:
     """
     Perform K-Means clustering on latent features and return assignments.
+
+    patients_features: dict[patient_id -> torch.Tensor or np.ndarray]
+        Each value should be a 1D feature vector (e.g. shape (C,) or (1, C)).
     """
     patient_ids = list(patients_features.keys())
 
-    # Convert all tensors to numpy and squeeze leading singleton dims
+    # Convert all tensors/arrays to numpy and squeeze leading singleton dims
     features = np.stack(
         [
             (
@@ -44,17 +45,15 @@ def run_kmeans(patients_features, k=4):
     return df_clusters
 
 
-def clusters_stats(df_clusters, df_clinical, side="left"):
+def clusters_stats(df_clusters: pd.DataFrame,
+                   df_clinical: pd.DataFrame,
+                   side: str = "left") -> pd.DataFrame:
     """
     Join clinical and cluster data and compute summary stats per cluster.
-    side: "left" or "right" — controls which KL distribution is computed.
-    """
 
-    score_funcs = {
-        "symptoms": compute_symptoms_score,
-        "structure": compute_structure_score,
-        "surgery": compute_surgery_score,
-    }
+    side: "left" or "right" — controls which side-specific clinical variables
+    and KL distribution are used.
+    """
 
     # Ensure IDs are comparable
     df_clusters["ID"] = df_clusters["ID"].astype(int)
@@ -64,28 +63,26 @@ def clusters_stats(df_clusters, df_clinical, side="left"):
     results = []
 
     for cluster_id, group in merged.groupby("cluster"):
-        sym = score_funcs["symptoms"](group)
-        struct = score_funcs["structure"](group)
-        surg = score_funcs["surgery"](group)
-        surgery_pct_yes, surgery_pct_no = compute_surgery_percentages(group)
+        sym = compute_symptoms_score(group, side=side)
+        struct = compute_structure_score(group, side=side)
+        surgery_pct_yes, surgery_pct_no = compute_surgery_percentages(group, side=side)
 
         row = {
             "cluster": cluster_id,
             "SYMPTOMS_SCORE": sym,
             "STRUCTURE_SCORE": struct,
-            "SURGERY_SCORE": surg,
             "N_PATIENTS": len(group),
             "SURGERY_PCT_YES": surgery_pct_yes,
             "SURGERY_PCT_NO": surgery_pct_no,
         }
 
-        # Add KL distribution only for the requested side
+        # KL distribution for the requested side
+        kl_counts = compute_kl_distribution(group, side=side)
+
         if side == "left":
-            kl_counts = compute_kl_left_distribution(group)
             for grade in [0, 1, 2, 3, 4]:
                 row[f"KL_LEFT_{grade}_PCT"] = kl_counts.loc[grade] / len(group)
         elif side == "right":
-            kl_counts = compute_kl_right_distribution(group)
             for grade in [0, 1, 2, 3, 4]:
                 row[f"KL_RIGHT_{grade}_PCT"] = kl_counts.loc[grade] / len(group)
         else:

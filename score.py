@@ -1,6 +1,5 @@
 import json
 
-import numpy as np
 import pandas as pd
 from scipy import stats
 
@@ -10,69 +9,82 @@ with open("variables.json", "r") as file:
     variables = json.load(file)
 
 
-def compute_symptoms_score(patients_df, variables=variables):
+def compute_symptoms_score(patients_df, side: str):
     """
-    Compute the mean Symptoms score for a set of patients in a cluster.
-
-    Inputs:
-        patients_df: DataFrame containing patient data
-        variables: dict containing 'WOMAC' and 'KOOS' lists
-
-    Returns:
-        float (cluster mean of symptoms, higher = worse)
+    Compute the mean Symptoms score for a set of patients in a cluster,
+    for a given side ("left" or "right").
     """
-    cols = variables["VARIABLES"]["WOMAC"] + variables["VARIABLES"]["KOOS"]
+    if side == "left":
+        cols = [
+            "V00WOMTSL",
+            "V00KOOSKPL",
+            "V00KOOSYML",
+            "V00KOOSQOL",
+        ]
+    elif side == "right":
+        cols = [
+            "V00WOMTSR",
+            "V00KOOSKPR",
+            "V00KOOSYMR",
+            "V00KOOSQOL",
+        ]
+    else:
+        raise ValueError(f"Unknown side: {side}")
+
     vals = patients_df[cols].mean(axis=1)  # patient-level means
-    cluster_score = 100 - vals.mean()      # invert and average
+    cluster_score = 100 - vals.mean()      # invert and average (higher = worse)
     return cluster_score
 
 
-def compute_structure_score(patients_df, variables=variables):
+def compute_structure_score(patients_df, side: str):
     """
-    Compute the dominant (mode) Structure score (0–2) for the cluster.
-    Inputs:
-        patients_df: DataFrame
-        variables: dict containing 'JOINT_SPACE_NARROWING' and 'OSTEOPHYTES'
-    Returns:
-        int (0, 1, or 2)
+    Compute the mean structural severity (0-2) for the cluster,
+    using JSN + osteophyte variables for the given side.
     """
-    cols = (
-        variables["VARIABLES"]["JOINT_SPACE_NARROWING"]
-        + variables["VARIABLES"]["OSTEOPHYTES"]
-    )
-    # Flatten all values for all patients and variables
-    flattened = patients_df[cols].to_numpy().flatten()
-    mode_val = stats.mode(flattened, keepdims=True).mode[0]
-    return int(mode_val)
+    jsn_cols = variables["VARIABLES"]["JOINT_SPACE_NARROWING"]
+    ost_cols = variables["VARIABLES"]["OSTEOPHYTES"]
+
+    if side == "left":
+        cols = [
+            jsn_cols[0],  # P01SVLKJSL
+            jsn_cols[1],  # P01SVLKJSM
+            ost_cols[0],  # P01SVLKOST
+        ]
+    elif side == "right":
+        cols = [
+            jsn_cols[2],  # P01SVRKJSL
+            jsn_cols[3],  # P01SVRKJSM
+            ost_cols[1],  # P01SVRKOST
+        ]
+    else:
+        raise ValueError(f"Unknown side: {side}")
+
+    # Average over variables and patients → scalar in [0, 2]
+    return float(patients_df[cols].mean().mean())
 
 
-def compute_surgery_score(patients_df, variables=variables):
+def compute_surgery_percentages(patients_df, side: str):
     """
-    Compute the dominant (mode) Surgery score (0 or 1) for the cluster.
+    Compute % of surgery yes/no for the given side.
 
-    Inputs:
-        patients_df: DataFrame
-        variables: dict containing 'SURGERY' list
-
-    Returns:
-        int (0 or 1)
+    For each side we look at:
+      - that side's surgery indicator
+      - and the global replacement indicator (either knee)
     """
-    cols = variables["VARIABLES"]["SURGERY"]
-    flattened = patients_df[cols].to_numpy().flatten()
-    mode_val = stats.mode(flattened, keepdims=True).mode[0]
-    return int(mode_val)
+    surg_cols = variables["VARIABLES"]["SURGERY"]
+    if side == "left":
+        cols = [
+            surg_cols[0],  # P01KSURGL
+            surg_cols[2],  # P02KSURGCV
+        ]
+    elif side == "right":
+        cols = [
+            surg_cols[1],  # P01KSURGR
+            surg_cols[2],  # P02KSURGCV
+        ]
+    else:
+        raise ValueError(f"Unknown side: {side}")
 
-
-def compute_surgery_percentages(patients_df, variables=variables):
-    """
-    Compute percentage of 0/1 surgery values in the cluster.
-
-    This looks at all surgery columns in VARIABLES["SURGERY"],
-    flattens them, and computes:
-        % of entries == 1 (yes)
-        % of entries == 0 (no)
-    """
-    cols = variables["VARIABLES"]["SURGERY"]
     vals = patients_df[cols].to_numpy().flatten()
 
     s = pd.Series(vals)
@@ -90,19 +102,19 @@ def compute_surgery_percentages(patients_df, variables=variables):
     return pct_yes, pct_no
 
 
-def compute_kl_left_distribution(patients_df, variables=variables):
+def compute_kl_distribution(patients_df, side: str):
     """
-    Return counts of KL grades 0-4 for the left knee in this cluster.
+    Return counts of KL grades 0-4 for the given knee side in this cluster.
+    side: "left" or "right"
     """
-    left_col = variables["VARIABLES"]["KL_GRADE"][0]
-    vc = patients_df[left_col].value_counts(dropna=True)
-    return vc.reindex([0, 1, 2, 3, 4], fill_value=0).astype(int)
+    kl_cols = variables["VARIABLES"]["KL_GRADE"]
 
+    if side == "left":
+        col = kl_cols[0]  # P01OAGRDL
+    elif side == "right":
+        col = kl_cols[1]  # P01OAGRDR
+    else:
+        raise ValueError(f"Unknown side: {side}")
 
-def compute_kl_right_distribution(patients_df, variables=variables):
-    """
-    Return counts of KL grades 0-4 for the right knee in this cluster.
-    """
-    right_col = variables["VARIABLES"]["KL_GRADE"][1]
-    vc = patients_df[right_col].value_counts(dropna=True)
+    vc = patients_df[col].value_counts(dropna=True)
     return vc.reindex([0, 1, 2, 3, 4], fill_value=0).astype(int)
