@@ -28,6 +28,7 @@ nvidia-smi
 
 sleep 10
 
-uv run infer.py --max_patients 30
+#uv run main.py --side left --max_patients 50
+uv run main.py 
 
 python -c "The job is finished!"

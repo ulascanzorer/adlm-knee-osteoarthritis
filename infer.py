@@ -1,97 +1,96 @@
-import argparse
+import os
+import sys
+import numpy as np
 import torch
 import torch.nn as nn
-import pandas as pd
-import sys,os
+
 from data import iter_mri_dataset
-from cluster import run_kmeans
-from tsne_visualization import tsne_plot, tsne_plot_with_k_means_clustering
 
 sys.path.append(os.path.abspath("MedicalNet"))
-from models.resnet import resnet50
-# Import MedicalNet model builder
+from models.resnet import resnet50  
 
 
-def main(args):
+def run_inference(
+    data_root: str,
+    side: str,
+    weights_path: str = "MedicalNet/pretrain/resnet_50.pth",
+    max_patients: int | None = None,
+    features_dir: str = "features",
+) -> str:
+    """
+    Run 3D ResNet-50 inference on MRIs for a given side and save latent features.
+
+    Saves:
+        {features_dir}/features_{side}.npz
+            - ids: np.ndarray of patient IDs (str)
+            - features: np.ndarray of shape [N, 2048]
+
+    Returns:
+        Path to the saved .npz file.
+    """
+
     # Build 3D ResNet-50 backbone
-    model = resnet50(sample_input_D=64, sample_input_H=224, sample_input_W=224, num_seg_classes=1)
+    model = resnet50(
+        sample_input_D=64,
+        sample_input_H=224,
+        sample_input_W=224,
+        num_seg_classes=1,
+    )
 
     # Load pretrained MedicalNet weights
-    checkpoint = torch.load(args.weights_path, map_location="cpu")
+    checkpoint = torch.load(weights_path, map_location="cpu")
     state_dict = checkpoint.get("state_dict", checkpoint)
     model.load_state_dict(state_dict, strict=False)
-    model = nn.Sequential(*list(model.children())[:-1])  # remove classification head
+
+    # Remove classification head -> keep feature extractor
+    model = nn.Sequential(*list(model.children())[:-1])
     model.eval()
 
-    print(f"Streaming {args.side} MRIs from {args.data_root} ...")
+    use_cuda = torch.cuda.is_available()
+    if use_cuda:
+        model = model.cuda()
 
-    patients_features = {}
+    print(f"[{side}] Streaming MRIs from {data_root} ...")
+
+    patients_features: dict[str, torch.Tensor] = {}
+
     with torch.no_grad():
-        for i, (p_id, vol) in enumerate(
-            iter_mri_dataset(
-                args.data_root,
-                side=args.side,
-                max_patients=args.max_patients,
-            )
+        for p_id, vol in iter_mri_dataset(
+            data_root,
+            side=side,
+            max_patients=max_patients,
         ):
-            # Move to GPU if available
-            vol = vol.unsqueeze(0)  # [1, 1, D, 224, 224]
-            if torch.cuda.is_available():
-                model = model.cuda()
+            # vol: [1, D, 224, 224] -> [1, 1, D, 224, 224]
+            vol = vol.unsqueeze(0)
+            if use_cuda:
                 vol = vol.cuda()
 
-            # Extract features
-            feats = model(vol)  # [1, 2048, 20, 28, 28]
-            feats = feats.mean(dim=(2, 3, 4))  # Global average pooling over depth + height + width -> [1, 2048]
+            # Extract features: [1, 2048, 20, 28, 28]
+            feats = model(vol)
+            # Global average pooling over depth/height/width -> [1, 2048]
+            feats = feats.mean(dim=(2, 3, 4))
+
             patients_features[p_id] = feats.cpu()
-            print(f"Processed patient {p_id}")
+            print(f"[{side}] Processed patient {p_id}")
 
     if not patients_features:
-        print("No patients processed, nothing to cluster.")
-        return
+        print(f"[{side}] No patients processed, nothing to save.")
+        os.makedirs(features_dir, exist_ok=True)
+        return os.path.join(features_dir, f"features_{side}.npz")
 
-    # Combine and cluster
-    all_patient_features = torch.cat(list(patients_features.values()), dim=0)
-    print(f"Final feature tensor shape: {all_patient_features.shape}")
+    # Save latent features
+    os.makedirs(features_dir, exist_ok=True)
+    feat_out = os.path.join(features_dir, f"features_{side}.npz")
 
-    df_clusters = run_kmeans(patients_features, k=4)
+    patient_ids = np.array(list(patients_features.keys()))
+    features = np.stack(
+        [
+            t.detach().numpy().squeeze()
+            for t in patients_features.values()
+        ]
+    )  # [N, 2048]
 
-    # Also perform tsne visualization here.
-    tsne_plot_with_k_means_clustering(patients_features, n_components=3)
+    np.savez(feat_out, ids=patient_ids, features=features)
+    print(f"[{side}] Saved features to {feat_out}")
 
-    os.makedirs("csv", exist_ok=True)
-    out_path = os.path.join("csv", f"mri_clusters_{args.side}.csv")
-    df_clusters.to_csv(out_path, index=False)
-    print(f"Saved cluster assignments to {out_path}")
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--data_root",
-        type=str,
-        default="/vol/miltank/projects/practical_wise2526/knee-osteoarthritis-severity/data/cleaned_images_baseline",
-        help="Root folder containing 0.C.2 and 0.E.1 directories",
-    )
-    parser.add_argument(
-        "--side",
-        type=str,
-        default="left",
-        choices=["left", "right"],
-        help="Knee side to process (default: left)",
-    )
-    parser.add_argument(
-        "--weights_path",
-        type=str,
-        default="MedicalNet/pretrain/resnet_50.pth",
-        help="Path to MedicalNet pretrained weights",
-    )
-    parser.add_argument(
-        "--max_patients",
-        type=int,
-        default=None,
-        help="Optional limit on number of patients to process",
-    )
-    args = parser.parse_args()
-
-    main(args)
+    return feat_out
