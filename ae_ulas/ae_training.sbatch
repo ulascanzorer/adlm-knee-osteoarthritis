@@ -24,5 +24,4 @@ ml python/uv
 # Run the program
 nvidia-smi
 
-# uv run main.py --side left --max_patients 50
-uv run python -u train.py
+uv run python -u main.py --max_patients 20

@@ -1,5 +1,5 @@
 # data_t.py
-from data import iter_mri_dataset, load_single_patient_mri
+from data_utils import iter_mri_dataset, load_single_patient_mri
 import torch
 from torch.utils.data import Dataset
 
@@ -21,7 +21,7 @@ class KneeMRIDataset(Dataset):
         # Load the specific volume on-demand.
         target_pid = self.patient_ids[idx]
 
-        vol = load_single_patient_mri(self.root, target_pid, self.side)
+        pid, vol = load_single_patient_mri(self.root, target_pid, self.side)
         if not torch.is_tensor(vol):
             vol = torch.tensor(vol, dtype=torch.float32)
 
