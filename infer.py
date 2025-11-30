@@ -5,9 +5,79 @@ import torch
 import torch.nn as nn
 
 from data import iter_mri_dataset
+from typing import Literal
+
+ModelName = Literal["resnet50", "autoencoder"]
 
 sys.path.append(os.path.abspath("MedicalNet"))
-from models.resnet import resnet50  
+from models.resnet import resnet50
+
+
+def build_feature_extractor(
+    model_name: ModelName,
+    weights_path: str,
+    device: torch.device,
+) -> nn.Module:
+    """
+    Return a model that, given vol [B, 1, D, H, W], outputs an embedding [B, F].
+    All model-specific stuff stays in here.
+    """
+    if model_name == "resnet50":
+        base_model = resnet50(
+            sample_input_D=64,
+            sample_input_H=224,
+            sample_input_W=224,
+            num_seg_classes=1,
+        )
+
+        checkpoint = torch.load(weights_path, map_location=device)
+        state_dict = checkpoint.get("state_dict", checkpoint)
+        base_model.load_state_dict(state_dict, strict=False)
+
+        # remove classification head -> keep feature extractor
+        feature_extractor = nn.Sequential(*list(base_model.children())[:-1])
+        feature_extractor = feature_extractor.to(device)
+        feature_extractor.eval()
+        return feature_extractor
+
+    elif model_name == "autoencoder":
+        from ae_ulas.model import Autoencoder3D
+
+        ae = Autoencoder3D()
+        state_dict = torch.load(weights_path, map_location=device)
+        ae.load_state_dict(state_dict)
+        ae = ae.to(device)
+        ae.eval()
+        return ae
+
+    else:
+        raise ValueError(f"Unknown model_name: {model_name}")
+
+
+def extract_features(
+    model: nn.Module,
+    vol: torch.Tensor,
+    model_name: ModelName,
+) -> torch.Tensor:
+    """
+    Forward one volume through the model and return a [1, F] embedding tensor.
+    """
+    if model_name == "resnet50":
+        # model outputs [B, 2048, D', H', W']
+        feats = model(vol)
+        feats = feats.mean(dim=(2, 3, 4))  # -> [B, 2048]
+        return feats
+
+    elif model_name == "autoencoder":
+        # Encode volume -> [B, C, D, H, W]
+        z = model.encoder(vol)
+
+        # Global average pooling over spatial dims -> [B, C]
+        z = z.mean(dim=(2, 3, 4))
+        return z
+
+    else:
+        raise ValueError(f"Unknown model_name: {model_name}")
 
 
 def run_inference(
@@ -16,43 +86,31 @@ def run_inference(
     weights_path: str = "MedicalNet/pretrain/resnet_50.pth",
     max_patients: int | None = None,
     features_dir: str = "features",
+    model_name: ModelName = "resnet50",
 ) -> str:
     """
-    Run 3D ResNet-50 inference on MRIs for a given side and save latent features.
+    Run inference on MRIs for a given side with a chosen feature extractor and save latent features.
 
     Saves:
         {features_dir}/features_{side}.npz
             - ids: np.ndarray of patient IDs (str)
-            - features: np.ndarray of shape [N, 2048]
+            - features: np.ndarray of shape [N, F] where F depends on the model.
 
     Returns:
         Path to the saved .npz file.
     """
-
-    # Build 3D ResNet-50 backbone
-    model = resnet50(
-        sample_input_D=64,
-        sample_input_H=224,
-        sample_input_W=224,
-        num_seg_classes=1,
+    # Build feature extractor for the chosen model
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = build_feature_extractor(
+        model_name=model_name,
+        weights_path=weights_path,
+        device=device,
     )
-
-    # Load pretrained MedicalNet weights
-    checkpoint = torch.load(weights_path, map_location="cpu")
-    state_dict = checkpoint.get("state_dict", checkpoint)
-    model.load_state_dict(state_dict, strict=False)
-
-    # Remove classification head -> keep feature extractor
-    model = nn.Sequential(*list(model.children())[:-1])
-    model.eval()
-
-    use_cuda = torch.cuda.is_available()
-    if use_cuda:
-        model = model.cuda()
 
     print(f"[{side}] Streaming MRIs from {data_root} ...")
 
     patients_features: dict[str, torch.Tensor] = {}
+    processed = 0
 
     with torch.no_grad():
         for p_id, vol in iter_mri_dataset(
@@ -61,17 +119,18 @@ def run_inference(
             max_patients=max_patients,
         ):
             # vol: [1, D, 224, 224] -> [1, 1, D, 224, 224]
-            vol = vol.unsqueeze(0)
-            if use_cuda:
-                vol = vol.cuda()
+            vol = vol.unsqueeze(0).to(device)
 
-            # Extract features: [1, 2048, 20, 28, 28]
-            feats = model(vol)
-            # Global average pooling over depth/height/width -> [1, 2048]
-            feats = feats.mean(dim=(2, 3, 4))
+            # Generic feature extraction for the chosen model -> [1, F]
+            feats = extract_features(
+                model=model,
+                vol=vol,
+                model_name=model_name,
+            )
 
             patients_features[p_id] = feats.cpu()
-            print(f"[{side}] Processed patient {p_id}")
+            processed += 1
+            print(f"[{side}] Processed {processed} patients (last ID: {p_id})")
 
     if not patients_features:
         print(f"[{side}] No patients processed, nothing to save.")
@@ -84,11 +143,8 @@ def run_inference(
 
     patient_ids = np.array(list(patients_features.keys()))
     features = np.stack(
-        [
-            t.detach().numpy().squeeze()
-            for t in patients_features.values()
-        ]
-    )  # [N, 2048]
+        [t.detach().numpy().squeeze() for t in patients_features.values()]
+    )  # [N, F]
 
     np.savez(feat_out, ids=patient_ids, features=features)
     print(f"[{side}] Saved features to {feat_out}")

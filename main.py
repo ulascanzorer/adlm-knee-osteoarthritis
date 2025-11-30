@@ -24,16 +24,14 @@ def load_features_npz(features_dir: str, side: str) -> tuple[np.ndarray, np.ndar
     return ids, features
 
 
-def run_clustering(features_dir: str, csv_dir: str, side: str, k: int = 4):
+def run_clustering(features_dir: str, csv_dir: str, side: str, k: int = 4) -> None:
     """
     Load features for a side, run KMeans, and save mri_clusters_{side}.csv.
     """
     ids, features = load_features_npz(features_dir, side)
 
     # cluster.run_kmeans expects a dict of patient_id -> tensor/ndarray
-    patients_features = {
-        str(pid): features[i] for i, pid in enumerate(ids)
-    }
+    patients_features = {str(pid): features[i] for i, pid in enumerate(ids)}
 
     df_clusters = run_kmeans(patients_features, k=k)
 
@@ -43,13 +41,15 @@ def run_clustering(features_dir: str, csv_dir: str, side: str, k: int = 4):
     print(f"[{side}] Saved cluster assignments to {out_path}")
 
 
-def run_stats(csv_dir: str, clinical_csv: str, side: str):
+def run_stats(csv_dir: str, clinical_csv: str, side: str) -> None:
     """
     Load clinical and cluster CSVs, compute stats for a side, and print + save them.
     """
     clusters_path = os.path.join(csv_dir, f"mri_clusters_{side}.csv")
     if not os.path.exists(clusters_path):
-        raise FileNotFoundError(f"Cluster CSV not found for side={side}: {clusters_path}")
+        raise FileNotFoundError(
+            f"Cluster CSV not found for side={side}: {clusters_path}"
+        )
 
     df_clinical = pd.read_csv(clinical_csv)
     df_clusters = pd.read_csv(clusters_path)
@@ -69,7 +69,7 @@ def run_tsne(
     side: str,
     n_components: int = 3,
     n_clusters: int = 4,
-):
+) -> None:
     """
     Load features for a side and run t-SNE visualization with KMeans coloring.
     """
@@ -84,7 +84,9 @@ def run_tsne(
     os.makedirs(plots_dir, exist_ok=True)
     out_path = os.path.join(plots_dir, f"tsne_{side}_{n_components}d.png")
 
-    print(f"[{side}] Running t-SNE ({n_components}D) on {features.shape[0]} patients...")
+    print(
+        f"[{side}] Running t-SNE ({n_components}D) on {features.shape[0]} patients..."
+    )
     tsne_plot_with_k_means_clustering(
         patients_features,
         n_components=n_components,
@@ -94,7 +96,7 @@ def run_tsne(
     print(f"[{side}] Saved t-SNE plot to {out_path}")
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Full MRI pipeline: inference, clustering, stats, t-SNE"
     )
@@ -107,8 +109,15 @@ def main():
     parser.add_argument(
         "--weights_path",
         type=str,
-        default="MedicalNet/pretrain/resnet_50.pth",
-        help="Path to MedicalNet pretrained weights",
+        default=None,
+        help="Path to model weights. If omitted, a model-specific default is used.",
+    )
+    parser.add_argument(
+        "--model_name",
+        type=str,
+        choices=["resnet50", "autoencoder"],
+        default="resnet50",
+        help="Which feature extractor to use.",
     )
     parser.add_argument(
         "--side",
@@ -151,10 +160,27 @@ def main():
 
     args = parser.parse_args()
 
-    # fixed dirs
-    features_dir = "features"
-    csv_dir = "csv"
-    plots_dir = "plots"
+    # Choose default weights if none provided
+    if args.weights_path is None:
+        if args.model_name == "resnet50":
+            weights_path = "MedicalNet/pretrain/resnet_50.pth"
+        else:  # autoencoder
+            weights_path = "trained_knee_3d_autoencoder.pth"
+    else:
+        weights_path = args.weights_path
+
+    print(f"Using model: {args.model_name}")
+    print(f"Weights: {weights_path}")
+
+    # Base results dir per model name
+    results_dir = os.path.join("results", args.model_name)
+
+    # Subdirs for different artifact types
+    features_dir = os.path.join(results_dir, "features")
+    csv_dir = os.path.join(results_dir, "csv")
+    plots_dir = os.path.join(results_dir, "plots")
+
+    os.makedirs(results_dir, exist_ok=True)
 
     if args.side == "both":
         sides = ["left", "right"]
@@ -168,9 +194,10 @@ def main():
         run_inference(
             data_root=args.data_root,
             side=side,
-            weights_path=args.weights_path,
+            weights_path=weights_path,
             max_patients=args.max_patients,
             features_dir=features_dir,
+            model_name=args.model_name,
         )
 
         # 2) Clustering → mri_clusters_<side>.csv

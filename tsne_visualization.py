@@ -6,7 +6,7 @@ def tsne_plot(patients_features, n_components=2, output_path='tsne_plot.png'):
     """Creates a TSNE model and plots it in 2D or 3D"""
     patient_ids = list(patients_features.keys())
     features = np.stack([
-        t.detach().cpu().numpy().squeeze()  # squeeze removes (1, 2048) → (2048,)
+        t.detach().cpu().numpy().squeeze() 
         for t in patients_features.values()
     ])
     tsne_model = TSNE(perplexity=20, n_components=n_components, init='pca', max_iter=2500, random_state=23)
@@ -21,14 +21,7 @@ def tsne_plot(patients_features, n_components=2, output_path='tsne_plot.png'):
             y.append(value[1])
         
         plt.figure(figsize=(16, 9))
-        for i in range(len(x)):
-            plt.scatter(x[i], y[i])
-            plt.annotate(patient_ids[i],
-                         xy=(x[i], y[i]),
-                         xytext=(5, 2),
-                         textcoords='offset points',
-                         ha='right',
-                         va='bottom')
+        plt.scatter(x, y, s=20)
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         plt.close()
         
@@ -45,9 +38,7 @@ def tsne_plot(patients_features, n_components=2, output_path='tsne_plot.png'):
         fig = plt.figure(figsize=(16, 9))
         ax = fig.add_subplot(111, projection='3d')
         
-        for i in range(len(x)):
-            ax.scatter(x[i], y[i], z[i])
-            ax.text(x[i], y[i], z[i], patient_ids[i], fontsize=9)
+        ax.scatter(x, y, z, s=20)
         
         ax.set_xlabel('Component 1')
         ax.set_ylabel('Component 2')
@@ -65,7 +56,7 @@ def tsne_plot_with_k_means_clustering(patients_features, n_components=2, n_clust
     
     patient_ids = list(patients_features.keys())
     features = np.stack([
-        t.detach().cpu().numpy().squeeze()  # squeeze removes (1, 2048) → (2048,)
+        t.detach().cpu().numpy().squeeze()  
         for t in patients_features.values()
     ])
     tsne_model = TSNE(perplexity=20, n_components=n_components, init='pca', max_iter=2500, random_state=23)
@@ -89,13 +80,7 @@ def tsne_plot_with_k_means_clustering(patients_features, n_components=2, n_clust
         plt.figure(figsize=(16, 9))
         for i in range(len(x)):
             cluster_id = cluster_labels[i]
-            plt.scatter(x[i], y[i], c=[colors[cluster_id]], s=100)
-            plt.annotate(patient_ids[i],
-                         xy=(x[i], y[i]),
-                         xytext=(5, 2),
-                         textcoords='offset points',
-                         ha='right',
-                         va='bottom')
+            plt.scatter(x[i], y[i], c=[colors[cluster_id]], s=20)
         plt.title(f't-SNE 2D Visualization ({n_clusters} clusters)')
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         plt.close()
@@ -115,8 +100,7 @@ def tsne_plot_with_k_means_clustering(patients_features, n_components=2, n_clust
         
         for i in range(len(x)):
             cluster_id = cluster_labels[i]
-            ax.scatter(x[i], y[i], z[i], c=[colors[cluster_id]], s=100)
-            ax.text(x[i], y[i], z[i], patient_ids[i], fontsize=9)
+            ax.scatter(x[i], y[i], z[i], c=[colors[cluster_id]], s=20)
         
         ax.set_xlabel('Component 1')
         ax.set_ylabel('Component 2')

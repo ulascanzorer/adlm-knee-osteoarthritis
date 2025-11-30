@@ -214,3 +214,6 @@ RadImageNet_weights/
 *.pth
 *.pt
 *.tar.gz
+*.err
+*.out
+results/
