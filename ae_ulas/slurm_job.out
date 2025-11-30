@@ -1,0 +1,72 @@
+Sun Nov 30 15:54:00 2025       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 570.86.15              Driver Version: 570.86.15      CUDA Version: 12.8     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA A40                     Off |   00000000:41:00.0 Off |                    0 |
+|  0%   32C    P8             23W /  300W |       1MiB /  46068MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+Beginning running our program...
+Using device: cuda
+This is the shape of the tensor we extract from the MRI image: torch.Size([1, 160, 224, 224])
+Created the dataset, this is the number of samples we have: 20
+This is the size of the dataloader: 7
+Beginning training now...
+Current epoch: 0
+Gradient norm: inf
+Gradient norm: 72864.88659625403
+Gradient norm: 67658.22600648564
+Gradient norm: 64867.498555838014
+Gradient norm: 61905.35980911508
+Gradient norm: 66204.46069604435
+Gradient norm: 64388.67526284261
+Epoch 1/5 - Loss: 1.028939
+Current epoch: 1
+Gradient norm: 60676.579813744516
+Gradient norm: 63600.51415494492
+Gradient norm: 62789.49392641555
+Gradient norm: 58612.20485895319
+Gradient norm: 62621.48212200091
+Gradient norm: 60610.25604493797
+Gradient norm: 57283.37504485328
+Epoch 2/5 - Loss: 0.848270
+Current epoch: 2
+Gradient norm: 60566.62486359293
+Gradient norm: 60330.4975712142
+Gradient norm: 57037.467232728595
+Gradient norm: 59001.59476287602
+Gradient norm: 57481.066159723334
+Gradient norm: 56529.20333670831
+Gradient norm: 58111.53855380049
+Epoch 3/5 - Loss: 0.754763
+Current epoch: 3
+Gradient norm: 59886.18368379072
+Gradient norm: 57944.77834752144
+Gradient norm: 53297.272220299565
+Gradient norm: 57790.9943438897
+Gradient norm: 57369.44588253064
+Gradient norm: 56426.48982168313
+Gradient norm: 47028.17529280287
+Epoch 4/5 - Loss: 0.670390
+Current epoch: 4
+Gradient norm: 54276.72293133344
+Gradient norm: 55975.884354458045
+Gradient norm: 55879.55758657326
+Gradient norm: 56870.07987645875
+Gradient norm: 53948.30679891419
+Gradient norm: 51961.74071731428
+Gradient norm: 50573.224760278456
+Epoch 5/5 - Loss: 0.609573
+Model saved to trained_knee_3d_autoencoder.pth
