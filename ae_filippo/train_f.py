@@ -1,7 +1,7 @@
 # train_f.py
 import torch
 from tqdm import tqdm
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 import wandb
 
 
@@ -41,7 +41,7 @@ def train_autoencoder(
             opt.zero_grad()
 
             if use_amp:
-                with autocast(device_type="cuda", dtype=torch.float16):
+                with autocast("cuda"):
                     recon, z = model(vol)
                     loss = loss_fn(recon, vol)
                 scaler.scale(loss).backward()
@@ -55,11 +55,10 @@ def train_autoencoder(
 
             running_loss += loss.item()
             pbar.set_postfix({"batch_loss": loss.item()})
-            wandb.log({"batch_loss": loss.item()})
+            
 
 
         epoch_loss = running_loss / len(dataloader)
-        wandb.log({"epoch_loss": epoch_loss})
 
         print(f"Epoch {epoch+1}/{num_epochs} - Loss: {epoch_loss:.6f}")
 

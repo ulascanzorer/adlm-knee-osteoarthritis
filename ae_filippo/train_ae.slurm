@@ -28,20 +28,12 @@ nvidia-smi
 echo
 
 
-# Make sure WANDB won’t ask for login on the cluster
-export WANDB_MODE=online
-export WANDB__SERVICE_WAIT=300
-export WANDB_DIR="${SLURM_SUBMIT_DIR}/wandb_runs"
-
-
-echo "W&B Mode: $WANDB_MODE"
-
 # ----------------------------
 # RUN TRAINING
 # ----------------------------
 
 echo "STARTING TRAINING JOB"
 echo "Running train.py..."
-python train.py
+python ae_filippo/train.py
 
 echo "Training DONE"

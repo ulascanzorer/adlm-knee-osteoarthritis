@@ -4,7 +4,7 @@ from train_f import train_autoencoder
 from data_t import KneeMRIDataset
 import torch
 from torch.utils.data import DataLoader
-from save import save_reconstruction, log_reconstruction_to_wandb
+from save import save_reconstruction
 import wandb
 
 def get_device():
@@ -30,7 +30,7 @@ def main():
     is_cuda = (device == "cuda")
     loader = DataLoader(
         dataset,
-        batch_size=2,
+        batch_size=20,
         shuffle=True,
         num_workers=4 if is_cuda else 0,
         pin_memory=is_cuda,
@@ -39,17 +39,18 @@ def main():
 
     model = Autoencoder3D(in_channels=1, latent_channels=64)
 
-    wandb.init(
-    project="knee-mri-autoencoder",
-    config={
-        "learning_rate": 1e-4,
-        "epochs": 50,
-        "batch_size": 1,
-        "latent_channels": 64,
-        "img_depth": 160,
-        "img_res": "224x224",
-    }
-)
+    # run= wandb.init(
+    # project="knee-mri-autoencoder",
+    # entity="knee-mri-autoencoder" ,
+    # config={
+    #     "learning_rate": 1e-4,
+    #     "epochs": 50,
+    #     "batch_size": 1,
+    #     "latent_channels": 64,
+    #     "img_depth": 160,
+    #     "img_res": "224x224",
+    # }
+#)
 
 
 
@@ -65,8 +66,8 @@ def main():
     torch.save(trained.state_dict(), "trained_knee_3d_autoencoder.pth")
     print("Model saved to trained_knee_3d_autoencoder.pth")
     save_reconstruction(trained, dataset, device)
-    log_reconstruction_to_wandb(trained, dataset, device, num_samples=5)
-    wandb.finish()
+    # log_reconstruction_to_wandb(trained, dataset, device, num_samples=5)
+    # run.finish()
 
 
 

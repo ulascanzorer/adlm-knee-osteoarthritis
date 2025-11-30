@@ -71,33 +71,36 @@ def reconstruct_mri_from_tar(tar_path):
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+
 def iter_mri_dataset(dataset_root, side="left", max_patients=None):
     """
     Generator that yields (patient_id, tensor[1, D, 224, 224])
-    one by one instead of storing everything in memory.
+    with a progress bar showing how many patients are being loaded.
     """
 
-    # Get sorted subset directories
-    subset_dirs = sorted(
+    # Get subset directories
+    subset_dirs = [
         d for d in os.listdir(dataset_root)
         if os.path.isdir(os.path.join(dataset_root, d))
-    )
+    ]
 
-    # Collect all patient IDs FIRST — so we know how many to load
+    # First collect ALL patient paths (so tqdm knows total length)
     all_patients = []
     for subset in subset_dirs:
         subset_path = os.path.join(dataset_root, subset)
-        for patient_id in sorted(os.listdir(subset_path)):
+        for patient_id in os.listdir(subset_path):
             all_patients.append((subset, patient_id))
 
-    # If max_patients is set, slice the list
+    # If max_patients requested, slice the list
     if max_patients is not None:
         all_patients = all_patients[:max_patients]
 
-    # ⭐ PROGRESS BAR FOR PATIENTS ⭐
-    pbar = tqdm(all_patients, desc="Loading MRI Patients", unit="patient")
+    # Build progress bar
+    pbar = tqdm(all_patients, desc=f"Loading {side} MRI volumes", unit="patient")
 
-    # Iterate through the patient list WITH PROGRESS BAR
+    count = 0
+
+    # Iterate through patients with a progress bar
     for subset, patient_id in pbar:
         subset_path = os.path.join(dataset_root, subset)
         patient_path = os.path.join(subset_path, patient_id)
@@ -114,4 +117,37 @@ def iter_mri_dataset(dataset_root, side="left", max_patients=None):
         tensor = reconstruct_mri_from_tar(tar_path)
 
         if tensor is not None:
+            count += 1
+
+            # print shape of first valid tensor
+            if count == 1:
+                print(f"This is the shape of the tensor we extract from the MRI image: {tensor.shape}")
+
             yield patient_id, tensor
+
+
+def load_single_patient_mri(dataset_root, patient_id, side="left"):
+    """A function which returns the specific patient mri as a tensor. Used in our custom Pytorch dataset."""
+    subset_dirs = [
+        d for d in os.listdir(dataset_root)
+        if os.path.isdir(os.path.join(dataset_root, d))
+    ]
+
+    for subset in subset_dirs:
+        subset_path = os.path.join(dataset_root, subset)
+        patient_path = os.path.join(subset_path, patient_id)
+        mri_side_dir = os.path.join(patient_path, "mri", side)
+
+        if not os.path.isdir(mri_side_dir):
+            continue
+
+        tar_files = [f for f in os.listdir(mri_side_dir) if f.endswith(".tar.gz")]
+        if not tar_files:
+            continue
+
+        tar_path = os.path.join(mri_side_dir, tar_files[0])
+        tensor = reconstruct_mri_from_tar(tar_path)
+
+        if tensor is not None:
+            return tensor
+        

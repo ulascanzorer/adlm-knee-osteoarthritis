@@ -46,26 +46,3 @@ def save_reconstruction(model, dataset, device, outdir="recon_samples", num_samp
 
     print(f"Saved reconstructions to {outdir}/")
 
-def log_reconstruction_to_wandb(model, dataset, device, num_samples=3):
-    model.eval()
-    with torch.no_grad():
-        for i in range(num_samples):
-            vol = dataset[i]         # (1, D, H, W)
-            vol = vol.unsqueeze(0)   # (1,1,D,H,W)
-            vol = vol.to(device)
-
-            recon, _ = model(vol)
-
-            vol = vol.cpu()[0][0]       # (D,H,W)
-            recon = recon.cpu()[0][0]   # (D,H,W)
-
-            D = vol.shape[0]
-            slices = [vol[D//2], recon[D//2]]
-
-            wandb.log({
-                f"patient_{i}_original_slice": wandb.Image(slices[0].numpy(), caption=f"Original slice (mid)"),
-                f"patient_{i}_recon_slice": wandb.Image(slices[1].numpy(), caption=f"Reconstructed slice (mid)")
-            })
-
-
-
