@@ -7,6 +7,7 @@ import torch
 import pydicom
 from PIL import Image
 from torchvision import transforms
+from tqdm import tqdm
 
 # standard normalization for MedicalNet input
 transform_2d = transforms.Compose([
@@ -75,31 +76,42 @@ def iter_mri_dataset(dataset_root, side="left", max_patients=None):
     Generator that yields (patient_id, tensor[1, D, 224, 224])
     one by one instead of storing everything in memory.
     """
-    subset_dirs = [
+
+    # Get sorted subset directories
+    subset_dirs = sorted(
         d for d in os.listdir(dataset_root)
         if os.path.isdir(os.path.join(dataset_root, d))
-    ]
+    )
 
-    count = 0
-
+    # Collect all patient IDs FIRST — so we know how many to load
+    all_patients = []
     for subset in subset_dirs:
         subset_path = os.path.join(dataset_root, subset)
-        for patient_id in os.listdir(subset_path):
-            if max_patients is not None and count >= max_patients:
-                return
+        for patient_id in sorted(os.listdir(subset_path)):
+            all_patients.append((subset, patient_id))
 
-            patient_path = os.path.join(subset_path, patient_id)
-            mri_side_dir = os.path.join(patient_path, "mri", side)
+    # If max_patients is set, slice the list
+    if max_patients is not None:
+        all_patients = all_patients[:max_patients]
 
-            if not os.path.isdir(mri_side_dir):
-                continue
+    # ⭐ PROGRESS BAR FOR PATIENTS ⭐
+    pbar = tqdm(all_patients, desc="Loading MRI Patients", unit="patient")
 
-            tar_files = [f for f in os.listdir(mri_side_dir) if f.endswith(".tar.gz")]
-            if not tar_files:
-                continue
+    # Iterate through the patient list WITH PROGRESS BAR
+    for subset, patient_id in pbar:
+        subset_path = os.path.join(dataset_root, subset)
+        patient_path = os.path.join(subset_path, patient_id)
+        mri_side_dir = os.path.join(patient_path, "mri", side)
 
-            tar_path = os.path.join(mri_side_dir, tar_files[0])
-            tensor = reconstruct_mri_from_tar(tar_path)
-            if tensor is not None:
-                count += 1
-                yield patient_id, tensor   
+        if not os.path.isdir(mri_side_dir):
+            continue
+
+        tar_files = [f for f in os.listdir(mri_side_dir) if f.endswith(".tar.gz")]
+        if not tar_files:
+            continue
+
+        tar_path = os.path.join(mri_side_dir, tar_files[0])
+        tensor = reconstruct_mri_from_tar(tar_path)
+
+        if tensor is not None:
+            yield patient_id, tensor

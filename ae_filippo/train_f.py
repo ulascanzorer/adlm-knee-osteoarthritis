@@ -2,6 +2,8 @@
 import torch
 from tqdm import tqdm
 from torch.cuda.amp import autocast, GradScaler
+import wandb
+
 
 
 def train_autoencoder(
@@ -53,8 +55,12 @@ def train_autoencoder(
 
             running_loss += loss.item()
             pbar.set_postfix({"batch_loss": loss.item()})
+            wandb.log({"batch_loss": loss.item()})
+
 
         epoch_loss = running_loss / len(dataloader)
+        wandb.log({"epoch_loss": epoch_loss})
+
         print(f"Epoch {epoch+1}/{num_epochs} - Loss: {epoch_loss:.6f}")
 
     return model
