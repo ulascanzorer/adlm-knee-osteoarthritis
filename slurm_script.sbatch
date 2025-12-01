@@ -6,7 +6,7 @@
 ##SBATCH --partition=universe,asteroids
 ##SBATCH --qos=phd
 #SBATCH --time=0-0:05:00
-#SBATCH --gres=gpu:1
+#SBATCH --gres=gpu:2
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=16G
  
@@ -28,7 +28,10 @@ nvidia-smi
 
 sleep 10
 
-#uv run main.py --side left --max_patients 50
-uv run main.py 
+uv run main.py \
+  --model_name autoencoder \
+  --weights_path trained_knee_3d_autoencoder_n980.pth \
+  --side left \
+  --max_patients 1000
 
 python -c "The job is finished!"
