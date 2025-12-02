@@ -1,11 +1,15 @@
-# train.py
+# ---------------------------------------------------------
+# train.py  (FINAL VERSION — WITH TRAIN + VALIDATION)
+# ---------------------------------------------------------
+
+import torch
+from torch.utils.data import DataLoader
 from model import Autoencoder3D
 from train_f import train_autoencoder
 from data_t import KneeMRIDataset
-import torch
-from torch.utils.data import DataLoader
 from save import save_reconstruction
 import wandb
+
 
 def get_device():
     if torch.cuda.is_available():
@@ -20,57 +24,71 @@ def main():
     device = get_device()
     print(f"Using device: {device}")
 
-    dataset = KneeMRIDataset(data_root, side='left', max_patients=None)
+    # -----------------------------------------------------
+    # Load train + validation sets
+    # -----------------------------------------------------
+    train_set = KneeMRIDataset(data_root, side="left", split="train")
+    val_set   = KneeMRIDataset(data_root, side="left", split="val")
 
-    if len(dataset) == 0:
-        print("No volumes found in dataset. Check data_root and structure.")
+    if len(train_set) == 0:
+        print("ERROR: No training volumes found! Check dataset path and splits.")
         return
 
-    # GPU-friendly DataLoader config
-    is_cuda = (device == "cuda")
-    loader = DataLoader(
-        dataset,
-        batch_size=20,
+    # -----------------------------------------------------
+    # Dataloaders
+    # -----------------------------------------------------
+    is_cuda = device == "cuda"
+
+    train_loader = DataLoader(
+        train_set,
+        batch_size=4,
         shuffle=True,
         num_workers=4 if is_cuda else 0,
         pin_memory=is_cuda,
         persistent_workers=is_cuda,
     )
 
-    model = Autoencoder3D(in_channels=1, latent_channels=64)
+    val_loader = DataLoader(
+        val_set,
+        batch_size=1,
+        shuffle=False,
+        num_workers=2 if is_cuda else 0,
+        pin_memory=is_cuda,
+        persistent_workers=is_cuda and len(val_set) > 0,
+    )
 
-    # run= wandb.init(
-    # project="knee-mri-autoencoder",
-    # entity="knee-mri-autoencoder" ,
-    # config={
-    #     "learning_rate": 1e-4,
-    #     "epochs": 50,
-    #     "batch_size": 1,
-    #     "latent_channels": 64,
-    #     "img_depth": 160,
-    #     "img_res": "224x224",
-    # }
-#)
+    # -----------------------------------------------------
+    # Model
+    # -----------------------------------------------------
+    model = Autoencoder3D(in_channels=1, latent_channels=64).to(device)
 
-
-
-    trained = train_autoencoder(
-        model,
-        loader,
-        num_epochs=50,
+    # -----------------------------------------------------
+    # Train with validation support
+    # -----------------------------------------------------
+    trained_model = train_autoencoder(
+        model=model,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        num_epochs=20,
         lr=1e-4,
         device=device,
         use_amp=is_cuda,
+        use_wandb=False,  # change to True if using wandb
     )
 
-    torch.save(trained.state_dict(), "trained_knee_3d_autoencoder.pth")
+    # -----------------------------------------------------
+    # Save final model
+    # -----------------------------------------------------
+    torch.save(trained_model.state_dict(), "trained_knee_3d_autoencoder.pth")
     print("Model saved to trained_knee_3d_autoencoder.pth")
-    save_reconstruction(trained, dataset, device)
-    # log_reconstruction_to_wandb(trained, dataset, device, num_samples=5)
-    # run.finish()
 
-
-
+    # -----------------------------------------------------
+    # Save example reconstruction
+    # -----------------------------------------------------
+    if len(val_set) > 0:
+        save_reconstruction(trained_model, val_set, device)
+    else:
+        save_reconstruction(trained_model, train_set, device)
 
 
 if __name__ == "__main__":

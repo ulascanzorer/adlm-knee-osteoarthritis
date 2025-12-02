@@ -2,15 +2,35 @@
 from data import iter_mri_dataset, load_single_patient_mri
 import torch
 from torch.utils.data import Dataset
+import random
+import os
+def list_patient_ids_fast(dataset_root, side="left", max_patients=None):
+    """Fast directory scan that does NOT load any MRI volumes."""
+    subset_dirs = [
+        d for d in os.listdir(dataset_root)
+        if os.path.isdir(os.path.join(dataset_root, d))
+    ]
 
+    ids = []
+    for subset in subset_dirs:
+        subset_path = os.path.join(dataset_root, subset)
+        for pid in os.listdir(subset_path):
+            mri_side_dir = os.path.join(subset_path, pid, "mri", side)
+            if os.path.isdir(mri_side_dir):
+                ids.append(pid)
+
+    if max_patients is not None:
+        ids = ids[:max_patients]
+
+    return ids
 
 class KneeMRIDataset(Dataset):
-    def __init__(self, root, side='left', max_patients=None):
+    def __init__(self, root, side='left',split='train', max_patients=None):
         self.root = root
         self.side = side
         self.max_patients = max_patients
 
-        self.patient_ids = []
+        all_ids = []
         EXCLUDE_L = {
         "9070923",
         "9388265",
@@ -22,13 +42,32 @@ class KneeMRIDataset(Dataset):
         "9637394",
         "9462278",
         "9522128",}
-        for pid, _ in iter_mri_dataset(root, side, max_patients=max_patients):
-            if side == "left" and pid in EXCLUDE_L:
-                continue
-            if side == "right" and pid in EXCLUDE_R:
-                continue
-            
-            self.patient_ids.append(pid)
+        
+        # FAST: no volume loading here
+        all_ids = list_patient_ids_fast(root, side, max_patients)
+
+        # Apply exclusions
+        if side == "left":
+            all_ids = [pid for pid in all_ids if pid not in EXCLUDE_L]
+        else:
+            all_ids = [pid for pid in all_ids if pid not in EXCLUDE_R]
+
+
+        random.shuffle(all_ids)
+        # 3. Split into train/val/test (70/15/15 example)
+        n_total = len(all_ids)
+        n_train = int(0.7 * n_total)
+        n_val   = int(0.15 * n_total)
+
+        if split == "train":
+            self.patient_ids = all_ids[:n_train]
+        elif split == "val":
+            self.patient_ids = all_ids[n_train:n_train+n_val]
+        elif split == "test":
+            self.patient_ids = all_ids[n_train+n_val:]
+        else:
+            raise ValueError("split must be 'train', 'val', or 'test'")
+
 
     def __len__(self):
         return len(self.patient_ids)

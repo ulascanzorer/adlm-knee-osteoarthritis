@@ -1,65 +1,108 @@
-# train_f.py
-import torch
-from tqdm import tqdm
-from torch.amp import autocast, GradScaler
-import wandb
+# ---------------------------------------------------------
+# train_f.py  (FINAL WORKING VERSION FOR YOUR DATASET)
+# ---------------------------------------------------------
 
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from tqdm import tqdm
+from torch.cuda.amp import autocast, GradScaler
 
 
 def train_autoencoder(
-        model,
-        dataloader,
-        num_epochs=50,
-        lr=1e-4,
-        device="cuda",
-        use_amp=True,
-    ):
+    model,
+    train_loader,
+    val_loader=None,
+    num_epochs=20,
+    lr=1e-4,
+    device="cuda",
+    use_amp=True,
+    use_wandb=False,
+):
+    """
+    Trains the autoencoder with optional validation.
+    """
 
-    device = torch.device(device)
-    model = model.to(device)
-    opt = torch.optim.Adam(model.parameters(), lr=lr)
-    loss_fn = torch.nn.MSELoss()
-
-    # Enable AMP only on CUDA
-    use_amp = use_amp and (device.type == "cuda") and torch.cuda.is_available()
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=lr)
     scaler = GradScaler(enabled=use_amp)
 
-    if len(dataloader) == 0:
-        print("Dataloader is empty. No training will be performed.")
-        return model
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode="min",
+        factor=0.5,
+        patience=3
+    )
 
-    for epoch in range(num_epochs):
+    best_val_loss = float("inf")
+
+    for epoch in range(1, num_epochs + 1):
+
+        # -------------------------------------------------
+        # TRAIN
+        # -------------------------------------------------
         model.train()
-        running_loss = 0.0
+        train_loss_sum = 0.0
 
-        pbar = tqdm(dataloader, desc=f"Epoch {epoch+1}/{num_epochs}", unit="batch")
+        pbar = tqdm(train_loader, desc=f"Epoch {epoch}/{num_epochs} (train)")
 
-        for vol in pbar:
-            # vol: (B, 1, D, H, W)
-            vol = vol.to(device, non_blocking=True).float()
+        for x in pbar:                     # <<<< ONLY ONE VALUE
+            x = x.to(device)
+            y = x                           # Autoencoder target = input
 
-            opt.zero_grad()
+            optimizer.zero_grad()
 
-            if use_amp:
-                with autocast("cuda"):
-                    recon, z = model(vol)
-                    loss = loss_fn(recon, vol)
-                scaler.scale(loss).backward()
-                scaler.step(opt)
-                scaler.update()
-            else:
-                recon, z = model(vol)
-                loss = loss_fn(recon, vol)
-                loss.backward()
-                opt.step()
+            with autocast(enabled=use_amp):
+                x_hat, _ = model(x)         # model returns (reconstruction, latent)
+                loss = criterion(x_hat, y)
 
-            running_loss += loss.item()
-            pbar.set_postfix({"batch_loss": loss.item()})
-            
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
 
+            train_loss_sum += loss.item()
 
-        epoch_loss = running_loss / len(dataloader)
+        train_loss = train_loss_sum / len(train_loader)
+        print(f"[Epoch {epoch}] Train Loss: {train_loss:.6f}")
 
-        print(f"Epoch {epoch+1}/{num_epochs} - Loss: {epoch_loss:.6f}")
+        if use_wandb:
+            import wandb
+            wandb.log({"train_loss": train_loss})
+
+        # -------------------------------------------------
+        # VALIDATION
+        # -------------------------------------------------
+        if val_loader is not None and len(val_loader) > 0:
+            model.eval()
+            val_loss_sum = 0.0
+
+            with torch.no_grad():
+                for x in val_loader:        # <<<< ONLY ONE VALUE
+                    x = x.to(device)
+                    y = x
+
+                    with autocast(enabled=use_amp):
+                        x_hat, _ = model(x)
+                        loss = criterion(x_hat, y)
+
+                    val_loss_sum += loss.item()
+
+            val_loss = val_loss_sum / len(val_loader)
+            print(f"[Epoch {epoch}] Val Loss: {val_loss:.6f}")
+
+            if use_wandb:
+                import wandb
+                wandb.log({"val_loss": val_loss})
+
+            scheduler.step(val_loss)
+
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                torch.save(model.state_dict(), "best_autoencoder_val.pth")
+                print("✨ New best validation model saved.")
+
+        else:
+            # No validation set → fall back to training loss
+            scheduler.step(train_loss)
 
     return model

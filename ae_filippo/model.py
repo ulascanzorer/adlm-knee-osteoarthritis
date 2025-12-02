@@ -8,19 +8,20 @@ class Encoder3D(nn.Module):
         super().__init__()
         self.enc = nn.Sequential(
             nn.Conv3d(in_channels, 32, 3, stride=2, padding=1),  # -> /2
-            nn.BatchNorm3d(32),
+            nn.InstanceNorm3d(32, affine=True),
             nn.ReLU(True),
 
-            nn.Conv3d(32, 64, 3, stride=2, padding=1),           # -> /4
-            nn.BatchNorm3d(64),
+            nn.Conv3d(32, 64, 3, stride=2, padding=1),
+            nn.InstanceNorm3d(64, affine=True),
             nn.ReLU(True),
 
-            nn.Conv3d(64, 128, 3, stride=2, padding=1),          # -> /8
-            nn.BatchNorm3d(128),
+            nn.Conv3d(64, 128, 3, stride=2, padding=1), 
+            nn.InstanceNorm3d(128, affine=True),
             nn.ReLU(True),
 
             nn.Conv3d(128, latent_channels, 3, stride=2, padding=1),  # -> /16
-            nn.BatchNorm3d(latent_channels),
+            nn.InstanceNorm3d(latent_channels, affine=True),
+
             nn.ReLU(True),
         )
 
@@ -33,15 +34,15 @@ class Decoder3D(nn.Module):
         super().__init__()
         self.dec = nn.Sequential(
             nn.ConvTranspose3d(latent_channels, 128, 3, stride=2, padding=1, output_padding=1),
-            nn.BatchNorm3d(128),
+            nn.InstanceNorm3d(128, affine=True),
             nn.ReLU(True),
 
             nn.ConvTranspose3d(128, 64, 3, stride=2, padding=1, output_padding=1),
-            nn.BatchNorm3d(64),
+            nn.InstanceNorm3d(64, affine=True),
             nn.ReLU(True),
 
             nn.ConvTranspose3d(64, 32, 3, stride=2, padding=1, output_padding=1),
-            nn.BatchNorm3d(32),
+            nn.InstanceNorm3d(32, affine=True),
             nn.ReLU(True),
 
             nn.ConvTranspose3d(32, out_channels, 3, stride=2, padding=1, output_padding=1),
