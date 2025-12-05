@@ -84,7 +84,7 @@ def iter_mri_dataset(dataset_root, side="left", max_patients=None):
         if os.path.isdir(os.path.join(dataset_root, d))
     ]
 
-    # First collect ALL patient paths (so tqdm knows total length)
+    # First collect ALL patient paths 
     all_patients = []
     for subset in subset_dirs:
         subset_path = os.path.join(dataset_root, subset)

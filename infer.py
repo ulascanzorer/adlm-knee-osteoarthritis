@@ -10,7 +10,7 @@ from typing import Literal
 ModelName = Literal["resnet50", "autoencoder"]
 
 sys.path.append(os.path.abspath("MedicalNet"))
-from models.resnet import resnet50
+#from models.resnet import resnet50
 
 
 def build_feature_extractor(

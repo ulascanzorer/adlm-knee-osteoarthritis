@@ -3,7 +3,6 @@ import tarfile
 import pydicom
 from collections import Counter
 
-# Set your dataset root here
 DATA_ROOT = "/vol/miltank/projects/practical_wise2526/knee-osteoarthritis-severity/data/cleaned_images_baseline"
 SIDE = "right"
 

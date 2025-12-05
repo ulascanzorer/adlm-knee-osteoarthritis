@@ -1,11 +1,9 @@
-# data_t.py
 from data import iter_mri_dataset, load_single_patient_mri
 import torch
 from torch.utils.data import Dataset
 import random
 import os
 def list_patient_ids_fast(dataset_root, side="left", max_patients=None):
-    """Fast directory scan that does NOT load any MRI volumes."""
     subset_dirs = [
         d for d in os.listdir(dataset_root)
         if os.path.isdir(os.path.join(dataset_root, d))
@@ -43,10 +41,9 @@ class KneeMRIDataset(Dataset):
         "9462278",
         "9522128",}
         
-        # FAST: no volume loading here
+        
         all_ids = list_patient_ids_fast(root, side, max_patients)
 
-        # Apply exclusions
         if side == "left":
             all_ids = [pid for pid in all_ids if pid not in EXCLUDE_L]
         else:
@@ -54,7 +51,6 @@ class KneeMRIDataset(Dataset):
 
 
         random.shuffle(all_ids)
-        # 3. Split into train/val/test (70/15/15 example)
         n_total = len(all_ids)
         n_train = int(0.7 * n_total)
         n_val   = int(0.15 * n_total)
@@ -73,7 +69,6 @@ class KneeMRIDataset(Dataset):
         return len(self.patient_ids)
 
     def __getitem__(self, idx):
-        # Load the specific volume on-demand.
         target_pid = self.patient_ids[idx]
 
         vol = load_single_patient_mri(self.root, target_pid, self.side)

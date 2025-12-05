@@ -1,7 +1,3 @@
-# ---------------------------------------------------------
-# train.py  (FINAL VERSION — WITH TRAIN + VALIDATION)
-# ---------------------------------------------------------
-
 import torch
 from torch.utils.data import DataLoader
 from model import Autoencoder3D
@@ -24,9 +20,7 @@ def main():
     device = get_device()
     print(f"Using device: {device}")
 
-    # -----------------------------------------------------
     # Load train + validation sets
-    # -----------------------------------------------------
     train_set = KneeMRIDataset(data_root, side="left", split="train")
     val_set   = KneeMRIDataset(data_root, side="left", split="val")
 
@@ -34,9 +28,9 @@ def main():
         print("ERROR: No training volumes found! Check dataset path and splits.")
         return
 
-    # -----------------------------------------------------
+
     # Dataloaders
-    # -----------------------------------------------------
+
     is_cuda = device == "cuda"
 
     train_loader = DataLoader(
@@ -57,34 +51,28 @@ def main():
         persistent_workers=is_cuda and len(val_set) > 0,
     )
 
-    # -----------------------------------------------------
     # Model
-    # -----------------------------------------------------
     model = Autoencoder3D(in_channels=1, latent_channels=64).to(device)
 
-    # -----------------------------------------------------
     # Train with validation support
-    # -----------------------------------------------------
+    num_epochs=50
     trained_model = train_autoencoder(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
-        num_epochs=20,
+        num_epochs=num_epochs,
         lr=1e-4,
         device=device,
         use_amp=is_cuda,
         use_wandb=False,  # change to True if using wandb
     )
 
-    # -----------------------------------------------------
     # Save final model
-    # -----------------------------------------------------
-    torch.save(trained_model.state_dict(), "trained_knee_3d_autoencoder.pth")
+    
+    torch.save(trained_model.state_dict(), "weights_ae/"+str(num_epochs)+"_ae.pth")
     print("Model saved to trained_knee_3d_autoencoder.pth")
 
-    # -----------------------------------------------------
     # Save example reconstruction
-    # -----------------------------------------------------
     if len(val_set) > 0:
         save_reconstruction(trained_model, val_set, device)
     else:

@@ -1,7 +1,3 @@
-# ---------------------------------------------------------
-# train_f.py  (FINAL WORKING VERSION FOR YOUR DATASET)
-# ---------------------------------------------------------
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -38,15 +34,13 @@ def train_autoencoder(
 
     for epoch in range(1, num_epochs + 1):
 
-        # -------------------------------------------------
         # TRAIN
-        # -------------------------------------------------
         model.train()
         train_loss_sum = 0.0
 
         pbar = tqdm(train_loader, desc=f"Epoch {epoch}/{num_epochs} (train)")
 
-        for x in pbar:                     # <<<< ONLY ONE VALUE
+        for x in pbar:                     
             x = x.to(device)
             y = x                           # Autoencoder target = input
 
@@ -69,15 +63,13 @@ def train_autoencoder(
             import wandb
             wandb.log({"train_loss": train_loss})
 
-        # -------------------------------------------------
         # VALIDATION
-        # -------------------------------------------------
         if val_loader is not None and len(val_loader) > 0:
             model.eval()
             val_loss_sum = 0.0
 
             with torch.no_grad():
-                for x in val_loader:        # <<<< ONLY ONE VALUE
+                for x in val_loader:        
                     x = x.to(device)
                     y = x
 
