@@ -1,25 +1,26 @@
 #!/bin/bash
 
 #SBATCH --job-name=inference_clustering_and_visualization
-#SBATCH --output=slurm_job.out
-#SBATCH --error=slurm_job.err
-##SBATCH --partition=universe,asteroids
-##SBATCH --qos=phd
-#SBATCH --time=0-0:05:00
-#SBATCH --gres=gpu:2
+#SBATCH --output=slurm_job_%j.out
+#SBATCH --error=slurm_job_%j.err
+#SBATCH --time=0-05:00:00
+#SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
-#SBATCH --mem=16G
+#SBATCH --mem=32G              
 
-# Load python uv module
-ml python/uv
 
-# Run the program
+source /etc/profile.d/modules.sh
+module load python/uv
+cd /vol/miltank/users/$USER/git/adlm-knee-osteoarthritis
+source .venv/bin/activate
+
 nvidia-smi
-sleep 10
+which python
+python --version
 
-uv run main.py \
-  --model_name autoencoder \
-  --weights_path 'weights_ae/50_ae.pth' \
+python main.py \
+  --model_name autoencoder_pain \
+  --weights_path 'weights_pain_ae/best_pain_ae_phase2_finetune.pth' \
   --side left
 
 # Final message

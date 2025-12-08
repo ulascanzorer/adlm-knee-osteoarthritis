@@ -7,7 +7,7 @@ import torch.nn as nn
 from data import iter_mri_dataset
 from typing import Literal
 
-ModelName = Literal["resnet50", "autoencoder"]
+ModelName = Literal["resnet50", "autoencoder", "autoencoder_pain"]
 
 sys.path.append(os.path.abspath("MedicalNet"))
 #from models.resnet import resnet50
@@ -23,6 +23,8 @@ def build_feature_extractor(
     All model-specific stuff stays in here.
     """
     if model_name == "resnet50":
+        from models.resnet import resnet50
+        
         base_model = resnet50(
             sample_input_D=64,
             sample_input_H=224,
@@ -50,6 +52,26 @@ def build_feature_extractor(
         ae.eval()
         return ae
 
+    elif model_name == "autoencoder_pain":
+       
+        from ae_pain.model import build_pain_ae
+
+
+        model = build_pain_ae(
+            pretrained_ae_path=None, 
+            device=device,
+            latent_channels=64,
+            num_pain_outputs=1
+        )
+        
+        state_dict = torch.load(weights_path, map_location=device)
+        model.load_state_dict(state_dict)
+        
+        model = model.to(device)
+        model.eval()
+        return model
+
+
     else:
         raise ValueError(f"Unknown model_name: {model_name}")
 
@@ -70,9 +92,16 @@ def extract_features(
 
     elif model_name == "autoencoder":
         # Encode volume -> [B, C, D, H, W]
+        # Standard AE has .encoder
         z = model.encoder(vol)
+        # Global average pooling -> [B, C]
+        z = z.mean(dim=(2, 3, 4))
+        return z
 
-        # Global average pooling over spatial dims -> [B, C]
+    elif model_name == "autoencoder_pain":
+        # AutoencoderWithPainHead also has .encoder
+        # We ignore the pain_head output and just take the latent Z
+        z = model.encoder(vol)
         z = z.mean(dim=(2, 3, 4))
         return z
 
@@ -89,18 +118,12 @@ def run_inference(
     model_name: ModelName = "resnet50",
 ) -> str:
     """
-    Run inference on MRIs for a given side with a chosen feature extractor and save latent features.
-
-    Saves:
-        {features_dir}/features_{side}.npz
-            - ids: np.ndarray of patient IDs (str)
-            - features: np.ndarray of shape [N, F] where F depends on the model.
-
-    Returns:
-        Path to the saved .npz file.
+    Run inference on MRIs for a given side with a chosen feature extractor.
     """
     # Build feature extractor for the chosen model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    print(f"[{side}] Building model '{model_name}'...")
     model = build_feature_extractor(
         model_name=model_name,
         weights_path=weights_path,
@@ -130,7 +153,11 @@ def run_inference(
 
             patients_features[p_id] = feats.cpu()
             processed += 1
-            print(f"[{side}] Processed {processed} patients (last ID: {p_id})")
+            
+            if processed % 10 == 0:
+                print(f"[{side}] Processed {processed} patients...", end="\r")
+
+    print(f"\n[{side}] Finished processing {processed} patients.")
 
     if not patients_features:
         print(f"[{side}] No patients processed, nothing to save.")

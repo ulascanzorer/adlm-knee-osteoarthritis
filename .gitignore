@@ -218,3 +218,5 @@ RadImageNet_weights/
 *.out
 results/
 reconstr/
+recon_samples_pain/
+recon_samples_pain_10/

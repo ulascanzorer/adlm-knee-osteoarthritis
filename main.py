@@ -1,9 +1,12 @@
 import argparse
 import os
+import sys
 
 import numpy as np
 import pandas as pd
 import torch
+
+sys.path.append(os.getcwd())
 
 from infer import run_inference
 from cluster import run_kmeans, clusters_stats
@@ -115,7 +118,7 @@ def main() -> None:
     parser.add_argument(
         "--model_name",
         type=str,
-        choices=["resnet50", "autoencoder"],
+        choices=["resnet50", "autoencoder", "autoencoder_pain"],
         default="resnet50",
         help="Which feature extractor to use.",
     )
@@ -164,13 +167,18 @@ def main() -> None:
     if args.weights_path is None:
         if args.model_name == "resnet50":
             weights_path = "MedicalNet/pretrain/resnet_50.pth"
-        else:  # autoencoder
+        elif args.model_name == "autoencoder":
             weights_path = "trained_knee_3d_autoencoder.pth"
+        elif args.model_name == "autoencoder_pain":
+            weights_path = "final_pain_ae_20epochs.pth"
     else:
         weights_path = args.weights_path
 
     print(f"Using model: {args.model_name}")
     print(f"Weights: {weights_path}")
+
+    if not os.path.exists(weights_path):
+        print(f"WARNING: Weights file not found at {weights_path}")
 
     # Base results dir per model name
     results_dir = os.path.join("results", args.model_name)
