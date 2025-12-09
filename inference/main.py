@@ -1,16 +1,13 @@
 import argparse
 import os
-import sys
 
 import numpy as np
 import pandas as pd
 import torch
 
-sys.path.append(os.getcwd())
-
 from infer import run_inference
 from cluster import run_kmeans, clusters_stats
-from tsne_visualization import tsne_plot_with_k_means_clustering
+from tsne_visualization import tsne_plot_with_clusters
 
 
 def load_features_npz(features_dir: str, side: str) -> tuple[np.ndarray, np.ndarray]:
@@ -27,7 +24,7 @@ def load_features_npz(features_dir: str, side: str) -> tuple[np.ndarray, np.ndar
     return ids, features
 
 
-def run_clustering(features_dir: str, csv_dir: str, side: str, k: int = 4) -> None:
+def run_clustering(features_dir: str, csv_dir: str, side: str, k: int = 5) -> None:
     """
     Load features for a side, run KMeans, and save mri_clusters_{side}.csv.
     """
@@ -42,6 +39,7 @@ def run_clustering(features_dir: str, csv_dir: str, side: str, k: int = 4) -> No
     out_path = os.path.join(csv_dir, f"mri_clusters_{side}.csv")
     df_clusters.to_csv(out_path, index=False)
     print(f"[{side}] Saved cluster assignments to {out_path}")
+    return df_clusters
 
 
 def run_stats(csv_dir: str, clinical_csv: str, side: str) -> None:
@@ -66,37 +64,45 @@ def run_stats(csv_dir: str, clinical_csv: str, side: str) -> None:
     print(f"[{side}] Saved cluster stats to {stats_path}")
 
 
-def run_tsne(
-    features_dir: str,
-    plots_dir: str,
-    side: str,
-    n_components: int = 3,
-    n_clusters: int = 4,
-) -> None:
+def run_tsne(features_dir: str, csv_dir: str, plots_dir: str, side: str,
+             n_components: int = 3) -> None:
     """
-    Load features for a side and run t-SNE visualization with KMeans coloring.
+    Load features and cluster assignments for a side,
+    then run t-SNE visualization colored by existing clusters.
     """
+
+    # Load features
     ids, features = load_features_npz(features_dir, side)
 
-    # tsne_visualization expects tensors with .detach()
+    # Load cluster CSV
+    clusters_path = os.path.join(csv_dir, f"mri_clusters_{side}.csv")
+    if not os.path.exists(clusters_path):
+        raise FileNotFoundError(f"Cluster CSV not found for side={side}: {clusters_path}")
+
+    df_clusters = pd.read_csv(clusters_path)
+
+    # Build dict: patient_id → torch tensor
     patients_features = {
         str(pid): torch.from_numpy(features[i]).unsqueeze(0)
         for i, pid in enumerate(ids)
     }
 
+    # Output path
     os.makedirs(plots_dir, exist_ok=True)
     out_path = os.path.join(plots_dir, f"tsne_{side}_{n_components}d.png")
 
-    print(
-        f"[{side}] Running t-SNE ({n_components}D) on {features.shape[0]} patients..."
-    )
-    tsne_plot_with_k_means_clustering(
-        patients_features,
+    print(f"[{side}] Running t-SNE with existing clusters...")
+
+    tsne_plot_with_clusters(
+        patients_features=patients_features,
+        df_clusters=df_clusters,
         n_components=n_components,
-        n_clusters=n_clusters,
         output_path=out_path,
     )
+
     print(f"[{side}] Saved t-SNE plot to {out_path}")
+
+
 
 
 def main() -> None:
@@ -118,7 +124,7 @@ def main() -> None:
     parser.add_argument(
         "--model_name",
         type=str,
-        choices=["resnet50", "autoencoder", "autoencoder_pain"],
+        choices=["resnet50", "autoencoder","autoencoder_pain"],
         default="resnet50",
         help="Which feature extractor to use.",
     )
@@ -144,7 +150,7 @@ def main() -> None:
     parser.add_argument(
         "--k",
         type=int,
-        default=4,
+        default=5,
         help="Number of clusters for KMeans.",
     )
     parser.add_argument(
@@ -154,31 +160,20 @@ def main() -> None:
         default=3,
         help="Number of t-SNE dimensions.",
     )
-    parser.add_argument(
-        "--tsne_clusters",
-        type=int,
-        default=4,
-        help="Number of clusters for coloring in t-SNE plots.",
-    )
-
+    
     args = parser.parse_args()
 
     # Choose default weights if none provided
     if args.weights_path is None:
         if args.model_name == "resnet50":
             weights_path = "MedicalNet/pretrain/resnet_50.pth"
-        elif args.model_name == "autoencoder":
+        else:  # autoencoder
             weights_path = "trained_knee_3d_autoencoder.pth"
-        elif args.model_name == "autoencoder_pain":
-            weights_path = "final_pain_ae_20epochs.pth"
     else:
         weights_path = args.weights_path
 
     print(f"Using model: {args.model_name}")
     print(f"Weights: {weights_path}")
-
-    if not os.path.exists(weights_path):
-        print(f"WARNING: Weights file not found at {weights_path}")
 
     # Base results dir per model name
     results_dir = os.path.join("results", args.model_name)
@@ -226,11 +221,12 @@ def main() -> None:
         # 4) t-SNE → tsne_<side>_<tsne_components>d.png
         run_tsne(
             features_dir=features_dir,
+            csv_dir=csv_dir,
             plots_dir=plots_dir,
             side=side,
             n_components=args.tsne_components,
-            n_clusters=args.tsne_clusters,
         )
+
 
 
 if __name__ == "__main__":

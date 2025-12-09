@@ -11,7 +11,7 @@ from score import (
 
 
 # Predefined number of clusters which corresponds to the KL grading
-def run_kmeans(patients_features, k: int = 4) -> pd.DataFrame:
+def run_kmeans(patients_features, k: int = 5) -> pd.DataFrame:
     """
     Perform K-Means clustering on latent features and return assignments.
 
