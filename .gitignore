@@ -216,7 +216,8 @@ RadImageNet_weights/
 *.tar.gz
 *.err
 *.out
-results/
 reconstr/
 recon_samples_pain/
 recon_samples_pain_10/
+recon_samples_pain_lambda05/
+recon_samples_pain_lambda5/

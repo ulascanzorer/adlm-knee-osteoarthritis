@@ -179,7 +179,7 @@ def main():
     
     batch_size = 8
     num_workers = 8  
-    lambda_pain = 0.5   
+    lambda_pain = 5.0   
     pretrained_ae_path = "./50_ae.pth"
     
     # Output Paths
@@ -294,7 +294,7 @@ def main():
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
-        num_epochs=15,          
+        num_epochs=20,          
         lr=1e-5,                # Low LR
         lambda_pain=lambda_pain,        
         device=device,
