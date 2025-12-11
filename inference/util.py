@@ -172,42 +172,58 @@ def save_sampled_mris(sampled_dict, dataset_root, output_root, side="left"):
                 print(f"   Failed to load {pid}: {e}")
 
 
-def compute_koos_pain_by_kl(
+def compute_all_stats_by_kl(
         df_clinical: pd.DataFrame,
         side: str = "left",
         output_path: str = None
     ) -> pd.DataFrame:
     """
-    Compute mean KOOS pain per KL grade cluster directly from clinical data.
-    Optionally save results to CSV.
+    Compute per-KL statistics for all clinical variables:
+      - SYMPTOMS subgroup variables → 100 - mean
+      - All other subgroup variables → mean
     """
 
-    # Choose KL column
+    # Select KL column
     kl_col = variables["VARIABLES"]["KL_GRADE"][0] if side == "left" else variables["VARIABLES"]["KL_GRADE"][1]
 
-    # Choose KOOS pain column
-    koos_col = "V00KOOSKPL" if side == "left" else "V00KOOSKPR"
+    # Select clinical variable groups
+    lr_group = variables["VARIABLES"]["ALL_L"] if side == "left" else variables["VARIABLES"]["ALL_R"]
 
-    # Filter only rows with valid KL grade & KOOS pain
-    df = df_clinical.dropna(subset=[kl_col, koos_col]).copy()
+    # Identify SYMPTOMS subgroup
+    symptoms_cols = lr_group.get("SYMPTOMS", [])
 
+    # Flatten all variables
+    all_vars = [c for cols in lr_group.values() for c in cols]
+
+    # Keep only columns that exist
+    all_vars = [c for c in all_vars if c in df_clinical.columns]
+
+    # Remove KL column if present
+    if kl_col in all_vars:
+        all_vars.remove(kl_col)
+
+    # Clean dataframe
+    df = df_clinical.dropna(subset=[kl_col]).copy()
     df[kl_col] = df[kl_col].astype(int)
 
-    # Compute mean KOOS pain per KL grade
-    result = (
-        df.groupby(kl_col)[koos_col]
-        .mean()
-        .reset_index()
-        .rename(columns={
-            kl_col: "KL_GRADE",
-            koos_col: "KOOS_PAIN_MEAN"
-        })
-    )
+    # Compute normal means per KL group
+    grouped = df.groupby(kl_col)[all_vars].mean()
 
-    # Save to CSV if path given
+    # Create output DataFrame
+    result = grouped.copy()
+
+    # Apply 100 - mean ONLY to SYMPTOMS variables
+    for col in symptoms_cols:
+        if col in result.columns:
+            result[col] = 100 - result[col]
+
+    # Add KL as a column
+    result = result.reset_index().rename(columns={kl_col: "KL_GRADE"})
+
+    # Save if needed
     if output_path is not None:
         result.to_csv(output_path, index=False)
-        print(f"✔ Saved KOOS pain stats to {output_path}")
+        print(f"✔ Saved KL-grade statistics to {output_path}")
 
     return result
 
@@ -229,7 +245,7 @@ def main():
 
    
     
-    df_stats_left = compute_koos_pain_by_kl(
+    df_stats_left = compute_all_stats_by_kl(
         df_clinical,
         side="left",
         output_path="/vol/miltank/users/foca/adlm-knee-osteoarthritis/csv/kl_clusters_left.csv"

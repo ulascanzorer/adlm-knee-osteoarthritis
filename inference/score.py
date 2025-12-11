@@ -10,30 +10,25 @@ with open("variables.json", "r") as file:
 
 
 def compute_symptoms_score(patients_df, side: str):
-    """
-    Compute the mean Symptoms score for a set of patients in a cluster,
-    for a given side ("left" or "right").
-    """
     if side == "left":
-        cols = [
-            "V00WOMTSL",
-            "V00KOOSKPL",
-            "V00KOOSYML",
-            "V00KOOSQOL",
-        ]
+        womac = patients_df["V00WOMTSL"]
+        koos_pain = patients_df["V00KOOSKPL"]
+        koos_sym = patients_df["V00KOOSYML"]
+        koos_qol = patients_df["V00KOOSQOL"]
     elif side == "right":
-        cols = [
-            "V00WOMTSR",
-            "V00KOOSKPR",
-            "V00KOOSYMR",
-            "V00KOOSQOL",
-        ]
-    else:
-        raise ValueError(f"Unknown side: {side}")
+        womac = patients_df["V00WOMTSR"]
+        koos_pain = patients_df["V00KOOSKPR"]
+        koos_sym = patients_df["V00KOOSYMR"]
+        koos_qol = patients_df["V00KOOSQOL"]
 
-    vals = patients_df[cols].mean(axis=1)  # patient-level means
-    cluster_score = 100 - vals.mean()      # invert and average (higher = worse)
-    return cluster_score
+    womac_norm = 100 - womac    # now higher = better
+                                # KOOS already: higher = better
+
+    patient_score = (womac_norm + koos_pain + koos_sym + koos_qol) / 4.0
+    return float(patient_score.mean())   
+    # 0 = worst, 100 = best
+   # invert and average normal womac (the higher the worse) this way ( the higher the best )
+                                            
 
 
 def compute_structure_score(patients_df, side: str):

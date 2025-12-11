@@ -46,9 +46,6 @@
         "SURGERY": [
           "P01KSURGR",
           "P02KSURGCV"
-        ],
-        "KL_GRADE": [
-          "P01OAGRDR"
         ]
       },
   
@@ -67,9 +64,6 @@
         "SURGERY": [
           "P01KSURGL",
           "P02KSURGCV"
-        ],
-        "KL_GRADE": [
-          "P01OAGRDL"
         ]
       }
     },
