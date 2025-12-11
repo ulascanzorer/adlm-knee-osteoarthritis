@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 
 import numpy as np
 import pandas as pd
@@ -8,6 +9,10 @@ import torch
 from infer import run_inference
 from cluster import run_kmeans, clusters_stats
 from tsne_visualization import tsne_plot_with_clusters
+
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.append(project_root)
 
 
 def load_features_npz(features_dir: str, side: str) -> tuple[np.ndarray, np.ndarray]:

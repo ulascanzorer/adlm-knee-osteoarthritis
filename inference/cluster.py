@@ -1,12 +1,12 @@
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
-
 from score import (
     compute_symptoms_score,
     compute_structure_score,
     compute_surgery_percentages,
     compute_kl_distribution,
+    compute_all_statistics
 )
 
 
@@ -45,17 +45,17 @@ def run_kmeans(patients_features, k: int = 5) -> pd.DataFrame:
     return df_clusters
 
 
-def clusters_stats(df_clusters: pd.DataFrame,
-                   df_clinical: pd.DataFrame,
-                   side: str = "left") -> pd.DataFrame:
+def clusters_stats(
+    df_clusters: pd.DataFrame,
+    df_clinical: pd.DataFrame,
+    side: str = "left"
+) -> pd.DataFrame:
     """
-    Join clinical and cluster data and compute summary stats per cluster.
-
-    side: "left" or "right" — controls which side-specific clinical variables
-    and KL distribution are used.
+    Merge clinical + cluster assignments and compute statistics per cluster.
+    side: 'left' or 'right'
     """
 
-    # Ensure IDs are comparable
+    # Ensure IDs are aligned
     df_clusters["ID"] = df_clusters["ID"].astype(int)
     df_clinical["ID"] = df_clinical["ID"].astype(int)
 
@@ -63,31 +63,36 @@ def clusters_stats(df_clusters: pd.DataFrame,
     results = []
 
     for cluster_id, group in merged.groupby("cluster"):
-        sym = compute_symptoms_score(group, side=side)
-        struct = compute_structure_score(group, side=side)
-        surgery_pct_yes, surgery_pct_no = compute_surgery_percentages(group, side=side)
 
+        # Initialize base row
         row = {
             "cluster": cluster_id,
-            "SYMPTOMS_SCORE": sym,
-            "STRUCTURE_SCORE": struct,
             "N_PATIENTS": len(group),
-            "SURGERY_PCT_YES": surgery_pct_yes,
-            "SURGERY_PCT_NO": surgery_pct_no,
+            "SYMPTOMS_SCORE": compute_symptoms_score(group, side),
+            "STRUCTURE_SCORE": compute_structure_score(group, side),
         }
 
-        # KL distribution for the requested side
-        kl_counts = compute_kl_distribution(group, side=side)
+        # Surgery summary (% of yes / no)
+        surg_yes, surg_no = compute_surgery_percentages(group, side)
+        row["SURGERY_PCT_YES"] = surg_yes
+        row["SURGERY_PCT_NO"] = surg_no
 
-        if side == "left":
-            for grade in [0, 1, 2, 3, 4]:
-                row[f"KL_LEFT_{grade}_PCT"] = kl_counts.loc[grade] / len(group)
-        elif side == "right":
-            for grade in [0, 1, 2, 3, 4]:
-                row[f"KL_RIGHT_{grade}_PCT"] = kl_counts.loc[grade] / len(group)
-        else:
-            raise ValueError(f"Unknown side: {side}")
+        # KL distribution for this side
+        kl_counts = compute_kl_distribution(group, side)
 
+        prefix = f"KL_{side.upper()}"
+        for grade in [0, 1, 2, 3, 4]:
+            row[f"{prefix}_{grade}_PCT"] = kl_counts.loc[grade] / len(group)
+
+        # NEW: ALL_L / ALL_R stats
+        all_stats = compute_all_statistics(group, side)
+
+        for subgroup, stats_dict in all_stats.items():
+            for col, val in stats_dict.items():
+                colname = f"{col}_MEAN"
+                row[colname] = val
+
+        # Save this cluster row
         results.append(row)
 
     return pd.DataFrame(results)

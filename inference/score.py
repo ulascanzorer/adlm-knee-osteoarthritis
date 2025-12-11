@@ -118,3 +118,38 @@ def compute_kl_distribution(patients_df, side: str):
 
     vc = patients_df[col].value_counts(dropna=True)
     return vc.reindex([0, 1, 2, 3, 4], fill_value=0).astype(int)
+
+
+def compute_all_statistics(patients_df, side: str):
+    """
+    Compute statistics for each subgroup (SYMPTOMS, STRUCTURE, SURGERY, KL_GRADE)
+    inside ALL_L or ALL_R depending on the knee side.
+    Returns a dictionary: subgroup -> {variable: score}
+    """
+
+    # Select correct group
+    if side == 'left':
+        lr_group = variables["VARIABLES"]["ALL_L"]
+    elif side == 'right':
+        lr_group = variables["VARIABLES"]["ALL_R"]
+    else:
+        raise ValueError(f"Unknown side: {side}")
+
+    result = {}
+
+    # Loop through subgroups
+    for subgroup, cols in lr_group.items():
+        subgroup_stats = {}
+
+        # Only use valid columns present in dataframe
+        valid_cols = [c for c in cols if c in patients_df.columns]
+
+        for col in valid_cols:
+            # All scoring logic is mean() as discussed
+            subgroup_stats[col] = patients_df[col].mean()
+
+        result[subgroup] = subgroup_stats
+
+    return result
+
+    
