@@ -8,8 +8,11 @@ import tarfile
 import pydicom
 import numpy as np
 from PIL import Image
+import json
 
-
+# Load the JSON file with variable definitions
+with open("variables.json", "r") as file:
+    variables = json.load(file)
 
 
 # SAMPLE PATIENTS PER CLUSTER
@@ -115,7 +118,7 @@ def get_image(dataset_root, patient_id, side="left"):
                 volume_3d /= volume_3d.max()
 
             
-            # Choose ONE of the following 👇
+            # Choose ONE of the following 
 
             # 1) Maximum Intensity Projection (MIP)
             unique_slice = volume_3d.max(axis=0)
@@ -169,6 +172,46 @@ def save_sampled_mris(sampled_dict, dataset_root, output_root, side="left"):
                 print(f"   Failed to load {pid}: {e}")
 
 
+def compute_koos_pain_by_kl(
+        df_clinical: pd.DataFrame,
+        side: str = "left",
+        output_path: str = None
+    ) -> pd.DataFrame:
+    """
+    Compute mean KOOS pain per KL grade cluster directly from clinical data.
+    Optionally save results to CSV.
+    """
+
+    # Choose KL column
+    kl_col = variables["VARIABLES"]["KL_GRADE"][0] if side == "left" else variables["VARIABLES"]["KL_GRADE"][1]
+
+    # Choose KOOS pain column
+    koos_col = "V00KOOSKPL" if side == "left" else "V00KOOSKPR"
+
+    # Filter only rows with valid KL grade & KOOS pain
+    df = df_clinical.dropna(subset=[kl_col, koos_col]).copy()
+
+    df[kl_col] = df[kl_col].astype(int)
+
+    # Compute mean KOOS pain per KL grade
+    result = (
+        df.groupby(kl_col)[koos_col]
+        .mean()
+        .reset_index()
+        .rename(columns={
+            kl_col: "KL_GRADE",
+            koos_col: "KOOS_PAIN_MEAN"
+        })
+    )
+
+    # Save to CSV if path given
+    if output_path is not None:
+        result.to_csv(output_path, index=False)
+        print(f"✔ Saved KOOS pain stats to {output_path}")
+
+    return result
+
+
 
 def main():
 
@@ -177,12 +220,22 @@ def main():
     SIDE = "left"
 
     file_path = "/vol/miltank/users/foca/adlm-knee-osteoarthritis/results/autoencoder/csv/mri_clusters_left.csv"
+    clinical="/vol/miltank/users/foca/adlm-knee-osteoarthritis/csv/clinical00_cleaned.csv"
+    df_clinical = pd.read_csv(clinical, sep = ',')
     pat_clust = pd.read_csv(file_path)
 
     num_clusters = pat_clust["cluster"].nunique()
-    sampled = extract_random_patients(pat_clust, num_clusters)
+    # sampled = extract_random_patients(pat_clust, num_clusters)
 
-    save_sampled_mris(sampled, DATASET_ROOT, OUTPUT_ROOT, SIDE)
+   
+    
+    df_stats_left = compute_koos_pain_by_kl(
+        df_clinical,
+        side="left",
+        output_path="/vol/miltank/users/foca/adlm-knee-osteoarthritis/csv/kl_clusters_left.csv"
+)
+
 
 if __name__ == "__main__":
     main()
+
