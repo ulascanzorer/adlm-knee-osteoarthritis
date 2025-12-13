@@ -58,6 +58,7 @@ def run_stats(csv_dir: str, clinical_csv: str, side: str) -> None:
         )
 
     df_clinical = pd.read_csv(clinical_csv)
+    df_clinical.columns = df_clinical.columns.str.strip()
     df_clusters = pd.read_csv(clusters_path)
 
     df_stats = clusters_stats(df_clusters, df_clinical, side=side)
