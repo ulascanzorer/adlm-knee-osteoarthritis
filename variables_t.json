@@ -1,0 +1,64 @@
+{
+  "VARIABLES": {
+    "ALL_R": {
+      "SYMPTOMS": [
+        "V00WOMTSR",
+        "V00KOOSKPR",
+        "V00KOOSYMR",
+        "V00KOOSQOL"
+      ],
+      "STRUCTURE": [
+        "V00XRJSL",
+        "V00XRJSM"
+        
+      ],
+      "SURGERY": [
+        "V99ERKVSAF"
+      ],
+      "KL_GRADE": [
+        "V00XRKL"
+      ]
+    },
+
+    "ALL_L": {
+      "SYMPTOMS": [
+        "V00WOMTSL",
+        "V00KOOSKPL",
+        "V00KOOSYML",
+        "V00KOOSQOL"
+      ],
+      "STRUCTURE": [
+        "V00XRJSL",
+        "V00XRJSM"
+      ],
+      "SURGERY": [
+        "V99ELKVSAF"
+      ],
+      "KL_GRADE": [
+         "V00XRKL"
+      ]
+    }
+  },
+
+  "VARIABLE_DESCRIPTIONS": {
+  "V00WOMTSR": "Right knee WOMAC total score (calculated).",
+  "V00WOMTSL": "Left knee WOMAC total score (calculated).",
+
+  "V00KOOSKPR": "Right knee KOOS Pain Score (calculated).",
+  "V00KOOSKPL": "Left knee KOOS Pain Score (calculated).",
+
+  "V00KOOSYMR": "Right knee KOOS Symptoms Score (calculated).",
+  "V00KOOSYML": "Left knee KOOS Symptoms Score (calculated).",
+
+  "V00KOOSQOL": "KOOS Quality of Life Score (calculated).",
+
+  "V00XRJSL": "Joint space narrowing (OARSI grades 0–3), lateral compartment.",
+  "V00XRJSM": "Joint space narrowing (OARSI grades 0–3), medial compartment.",
+
+  "V00XRKL": "Kellgren–Lawrence global osteoarthritis severity grade (0–4).",
+
+  "V99ERKVSAF": "Right knee surgery variable (exact definition depends on dataset documentation).",
+  "V99ELKVSAF": "Left knee surgery variable (exact definition depends on dataset documentation)."
+
+}
+}

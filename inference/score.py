@@ -4,58 +4,9 @@ import pandas as pd
 from scipy import stats
 
 
-# Load the JSON file with variable definitions
 with open("variables.json", "r") as file:
     variables = json.load(file)
 
-
-def compute_symptoms_score(patients_df, side: str):
-    if side == "left":
-        womac = patients_df["V00WOMTSL"]
-        koos_pain = patients_df["V00KOOSKPL"]
-        koos_sym = patients_df["V00KOOSYML"]
-        koos_qol = patients_df["V00KOOSQOL"]
-    elif side == "right":
-        womac = patients_df["V00WOMTSR"]
-        koos_pain = patients_df["V00KOOSKPR"]
-        koos_sym = patients_df["V00KOOSYMR"]
-        koos_qol = patients_df["V00KOOSQOL"]
-
-    womac_norm = 100 - womac    # now higher = better
-                                # KOOS already: higher = better
-
-    patient_score = (womac_norm + koos_pain + koos_sym + koos_qol) / 4.0
-    return float(patient_score.mean())   
-    # 0 = worst, 100 = best
-   # invert and average normal womac (the higher the worse) this way ( the higher the best )
-                                            
-
-
-def compute_structure_score(patients_df, side: str):
-    """
-    Compute the mean structural severity (0-2) for the cluster,
-    using JSN + osteophyte variables for the given side.
-    """
-    jsn_cols = variables["VARIABLES"]["JOINT_SPACE_NARROWING"]
-    ost_cols = variables["VARIABLES"]["OSTEOPHYTES"]
-
-    if side == "left":
-        cols = [
-            jsn_cols[0],  # P01SVLKJSL
-            jsn_cols[1],  # P01SVLKJSM
-            ost_cols[0],  # P01SVLKOST
-        ]
-    elif side == "right":
-        cols = [
-            jsn_cols[2],  # P01SVRKJSL
-            jsn_cols[3],  # P01SVRKJSM
-            ost_cols[1],  # P01SVRKOST
-        ]
-    else:
-        raise ValueError(f"Unknown side: {side}")
-
-    # Average over variables and patients → scalar in [0, 2]
-    return float(patients_df[cols].mean().mean())
 
 
 def compute_surgery_percentages(patients_df, side: str):
@@ -66,17 +17,15 @@ def compute_surgery_percentages(patients_df, side: str):
       - that side's surgery indicator
       - and the global replacement indicator (either knee)
     """
-    surg_cols = variables["VARIABLES"]["SURGERY"]
     if side == "left":
-        cols = [
-            surg_cols[0],  # P01KSURGL
-            surg_cols[2],  # P02KSURGCV
-        ]
+        surg_cols = variables["VARIABLES"]["ALL_L"]["SURGERY"]
+
+        cols =  surg_cols[0]
+            
     elif side == "right":
-        cols = [
-            surg_cols[1],  # P01KSURGR
-            surg_cols[2],  # P02KSURGCV
-        ]
+        surg_cols = variables["VARIABLES"]["ALL_R"]["SURGERY"]
+
+        cols = surg_cols[0]
     else:
         raise ValueError(f"Unknown side: {side}")
 
@@ -102,12 +51,17 @@ def compute_kl_distribution(patients_df, side: str):
     Return counts of KL grades 0-4 for the given knee side in this cluster.
     side: "left" or "right"
     """
-    kl_cols = variables["VARIABLES"]["KL_GRADE"]
 
     if side == "left":
-        col = kl_cols[0]  # P01OAGRDL
+
+        kl_cols = variables["VARIABLES"]["ALL_L"]["KL_GRADE"]
+        col = kl_cols[0]  
+
     elif side == "right":
-        col = kl_cols[1]  # P01OAGRDR
+
+        kl_cols = variables["VARIABLES"]["ALL_R"]["KL_GRADE"]
+        col = kl_cols[0]  
+
     else:
         raise ValueError(f"Unknown side: {side}")
 
@@ -122,7 +76,6 @@ def compute_all_statistics(patients_df, side: str):
     Returns a dictionary: subgroup -> {variable: score}
     """
 
-    # Select correct group
     if side == 'left':
         lr_group = variables["VARIABLES"]["ALL_L"]
     elif side == 'right':
@@ -132,15 +85,15 @@ def compute_all_statistics(patients_df, side: str):
 
     result = {}
 
-    # Loop through subgroups
+    # Loop through only the subgroups of SYMPTOMS and STRUCTURE
     for subgroup, cols in lr_group.items():
+        if subgroup not in ["SYMPTOMS", "STRUCTURE"]:
+            continue
         subgroup_stats = {}
 
-        # Only use valid columns present in dataframe
         valid_cols = [c for c in cols if c in patients_df.columns]
 
         for col in valid_cols:
-            # All scoring logic is mean() as discussed
             subgroup_stats[col] = patients_df[col].mean()
 
         result[subgroup] = subgroup_stats

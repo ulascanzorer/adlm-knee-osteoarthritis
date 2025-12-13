@@ -2,8 +2,6 @@ import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
 from score import (
-    compute_symptoms_score,
-    compute_structure_score,
     compute_surgery_percentages,
     compute_kl_distribution,
     compute_all_statistics
@@ -41,7 +39,7 @@ def run_kmeans(patients_features, k: int = 5) -> pd.DataFrame:
             "cluster": labels,
         }
     )
-    print(f"✅ K-Means clustering complete. Found {k} clusters.")
+    print(f" K-Means clustering complete. Found {k} clusters.")
     return df_clusters
 
 
@@ -68,8 +66,6 @@ def clusters_stats(
         row = {
             "cluster": cluster_id,
             "N_PATIENTS": len(group),
-            "SYMPTOMS_SCORE": compute_symptoms_score(group, side),
-            "STRUCTURE_SCORE": compute_structure_score(group, side),
         }
 
         # Surgery summary (% of yes / no)
@@ -84,7 +80,7 @@ def clusters_stats(
         for grade in [0, 1, 2, 3, 4]:
             row[f"{prefix}_{grade}_PCT"] = kl_counts.loc[grade] / len(group)
 
-        # NEW: ALL_L / ALL_R stats
+        # ALL_L / ALL_R stats
         all_stats = compute_all_statistics(group, side)
 
         for subgroup, stats_dict in all_stats.items():

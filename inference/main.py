@@ -86,13 +86,11 @@ def run_tsne(features_dir: str, csv_dir: str, plots_dir: str, side: str,
 
     df_clusters = pd.read_csv(clusters_path)
 
-    # Build dict: patient_id → torch tensor
     patients_features = {
         str(pid): torch.from_numpy(features[i]).unsqueeze(0)
         for i, pid in enumerate(ids)
     }
 
-    # Output path
     os.makedirs(plots_dir, exist_ok=True)
     out_path = os.path.join(plots_dir, f"tsne_{side}_{n_components}d.png")
 
