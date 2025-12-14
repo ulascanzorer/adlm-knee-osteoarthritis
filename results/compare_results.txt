@@ -1,0 +1,22 @@
+============================================================
+LINEAR PROBING COMPARISON: Normal AE vs. Pain AE
+============================================================
+
+--- Task 1: Surgery Prediction (V99ELKVSAF) ---
+Metric used: AUC
+Normal AE:   0.6915 (+/- 0.0238)
+Pain AE:     0.6907 (+/- 0.0202)
+Improvement: -0.0008 (-0.12%)
+
+--- Task 2: Pain Prediction (V00KOOSKPL) ---
+Metric used: R^2
+Normal AE:   0.0884 (+/- 0.0140)
+Pain AE:     0.1153 (+/- 0.0170)
+Improvement: +0.0269 (+30.44%)
+
+--- Task 3: Joint Space Narrowing (V00XRJSM_L) ---
+Metric used: AUC
+Normal AE:   0.6857 (+/- 0.0119)
+Pain AE:     0.6849 (+/- 0.0106)
+Improvement: -0.0008 (-0.11%)
+============================================================
