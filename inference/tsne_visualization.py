@@ -2,7 +2,6 @@ import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 import numpy as np
 
-
 def tsne_plot_with_clusters(
     patients_features,
     df_clusters,
@@ -11,11 +10,7 @@ def tsne_plot_with_clusters(
 ):
     """
     Runs t-SNE on patient features and colors points using existing clusters.
-
-    patients_features: dict(patient_id -> tensor)
-    df_clusters: DataFrame with columns ["ID", "cluster"]
-
-    n_components: 2 or 3
+    Supports 1D, 2D, and 3D.
     """
     # 1. Extract patient IDs and feature tensors
     patients_features = {int(pid): feat for pid, feat in patients_features.items()}
@@ -29,16 +24,15 @@ def tsne_plot_with_clusters(
 
     # 2. Map cluster labels to patient IDs
     id_to_cluster = dict(zip(df_clusters["ID"], df_clusters["cluster"]))
-
-    # Assign cluster labels to each patient in same order as features
     cluster_labels = np.array([id_to_cluster[pid] for pid in patient_ids])
 
-    unique_clusters = np.unique(cluster_labels)
+    unique_clusters = np.sort(np.unique(cluster_labels))
     colors = plt.cm.tab10(np.linspace(0, 1, len(unique_clusters)))
 
     # 3. Run t-SNE
+    print(f"Running t-SNE with n_components={n_components}...")
     tsne_model = TSNE(
-        perplexity=20,
+        perplexity=30,           
         n_components=n_components,
         init="pca",
         max_iter=2500,
@@ -46,10 +40,36 @@ def tsne_plot_with_clusters(
     )
     tsne_values = tsne_model.fit_transform(features)
 
-    # 4. Plot TSNE (2D)
-    if n_components == 2:
-        plt.figure(figsize=(16, 9))
 
+    if n_components == 1:
+        plt.figure(figsize=(12, 5))
+        
+        # Add random "Jitter" to Y-axis so dots don't overlap
+        y_jitter = np.random.normal(loc=0, scale=0.05, size=len(tsne_values))
+
+        for cluster_id in unique_clusters:
+            idx = np.where(cluster_labels == cluster_id)[0]
+            plt.scatter(
+                tsne_values[idx, 0],   # X is the 1D t-SNE value
+                y_jitter[idx],         # Y is fake noise
+                c=[colors[cluster_id]],
+                s=50,
+                alpha=0.7,
+                label=f"Cluster {cluster_id}"
+            )
+
+        plt.title("t-SNE 1D Visualization")
+        plt.xlabel("Decease Score")
+        plt.yticks([])  
+        plt.legend(title="Clusters")
+        plt.grid(axis='x', alpha=0.3)
+        
+        plt.savefig(output_path, dpi=300, bbox_inches="tight")
+        plt.close()
+
+
+    elif n_components == 2:
+        plt.figure(figsize=(16, 9))
         for cluster_id in unique_clusters:
             idx = np.where(cluster_labels == cluster_id)[0]
             plt.scatter(
@@ -60,21 +80,15 @@ def tsne_plot_with_clusters(
                 alpha=0.85,
                 label=f"Cluster {cluster_id}"
             )
-
-        plt.title("t-SNE 2D Visualization (Existing Clusters)")
-        plt.xlabel("t-SNE 1")
-        plt.ylabel("t-SNE 2")
+        plt.title("t-SNE 2D Visualization")
         plt.legend(title="Clusters")
         plt.grid(alpha=0.2)
-
         plt.savefig(output_path, dpi=300, bbox_inches="tight")
         plt.close()
 
-    # 5. Plot TSNE (3D)
     elif n_components == 3:
         fig = plt.figure(figsize=(16, 9))
         ax = fig.add_subplot(111, projection="3d")
-
         for cluster_id in unique_clusters:
             idx = np.where(cluster_labels == cluster_id)[0]
             ax.scatter(
@@ -86,15 +100,10 @@ def tsne_plot_with_clusters(
                 alpha=0.85,
                 label=f"Cluster {cluster_id}"
             )
-
-        ax.set_title("t-SNE 3D Visualization (Existing Clusters)")
-        ax.set_xlabel("t-SNE 1")
-        ax.set_ylabel("t-SNE 2")
-        ax.set_zlabel("t-SNE 3")
+        ax.set_title("t-SNE 3D Visualization")
         ax.legend(title="Clusters")
-
         plt.savefig(output_path, dpi=300, bbox_inches="tight")
         plt.close()
 
     else:
-        raise ValueError("n_components must be 2 or 3")
+        raise ValueError("n_components must be 1, 2, or 3")

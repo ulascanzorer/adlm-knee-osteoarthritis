@@ -160,8 +160,8 @@ def main() -> None:
     parser.add_argument(
         "--tsne_components",
         type=int,
-        choices=[2, 3],
-        default=3,
+        choices=[1, 2, 3],
+        default=1,
         help="Number of t-SNE dimensions.",
     )
     
