@@ -9,6 +9,7 @@ import pydicom
 import numpy as np
 from PIL import Image
 import json
+from score import compute_surgery_percentages, compute_all_statistics
 
 # Load the JSON file with variable definitions
 with open("variables.json", "r") as file:
@@ -172,83 +173,86 @@ def save_sampled_mris(sampled_dict, dataset_root, output_root, side="left"):
                 print(f"   Failed to load {pid}: {e}")
 
 
-def compute_all_stats_by_kl(
-        df_clinical: pd.DataFrame,
-        side: str = "left",
-        output_path: str = None
-    ) -> pd.DataFrame:
-    """
-    Compute per-KL statistics for all clinical variables:
-      - SYMPTOMS subgroup variables → 100 - mean
-      - All other subgroup variables → mean
-    """
+def compute_all_stats_by_kl(df_clinical, side="left", output_path=None):
 
-    # Select KL column
-    kl_col = variables["VARIABLES"]["KL_GRADE"][0] if side == "left" else variables["VARIABLES"]["KL_GRADE"][1]
+    # Clean column names
+    df_clinical.columns = df_clinical.columns.str.strip()
 
-    # Select clinical variable groups
-    lr_group = variables["VARIABLES"]["ALL_L"] if side == "left" else variables["VARIABLES"]["ALL_R"]
+    # Determine KL column
+    kl_col = f"V00XRKL_{'L' if side == 'left' else 'R'}"
+    print(f"Using KL column: {kl_col}")
 
-    # Identify SYMPTOMS subgroup
-    symptoms_cols = lr_group.get("SYMPTOMS", [])
+    if kl_col not in df_clinical.columns:
+        raise KeyError(f"KL column {kl_col} not found in clinical dataframe!")
 
-    # Flatten all variables
-    all_vars = [c for cols in lr_group.values() for c in cols]
+    # Ensure KL values are integers
+    df_clinical[kl_col] = df_clinical[kl_col].astype(float).astype("Int64")
 
-    # Keep only columns that exist
-    all_vars = [c for c in all_vars if c in df_clinical.columns]
+    # Group patients by KL
+    grouped = df_clinical.groupby(kl_col)
 
-    # Remove KL column if present
-    if kl_col in all_vars:
-        all_vars.remove(kl_col)
+    all_rows = []
 
-    # Clean dataframe
-    df = df_clinical.dropna(subset=[kl_col]).copy()
-    df[kl_col] = df[kl_col].astype(int)
+    for kl_value, patients_df in grouped:
 
-    # Compute normal means per KL group
-    grouped = df.groupby(kl_col)[all_vars].mean()
+        print(f"\n=== Processing KL grade {kl_value}, n={len(patients_df)} ===")
 
-    # Create output DataFrame
-    result = grouped.copy()
+        # Surgery percentages
+        pct_yes, pct_no = compute_surgery_percentages(patients_df, side)
 
-    # Apply 100 - mean ONLY to SYMPTOMS variables
-    for col in symptoms_cols:
-        if col in result.columns:
-            result[col] = 100 - result[col]
+        # Mean stats for symptoms and structure
+        stats = compute_all_statistics(patients_df, side)
 
-    # Add KL as a column
-    result = result.reset_index().rename(columns={kl_col: "KL_GRADE"})
+        # Flatten stats dictionary into one row
+        row = {
+            "KL_GRADE": kl_value,
+            "NUM_PATIENTS": len(patients_df),
+            "SURGERY_YES_%": pct_yes,
+            "SURGERY_NO_%": pct_no,
+        }
 
-    # Save if needed
+        for subgroup, measures in stats.items():
+            for varname, value in measures.items():
+                row[f"{varname}"] = value
+
+        all_rows.append(row)
+
+    # Create final DataFrame
+    result = pd.DataFrame(all_rows).sort_values("KL_GRADE")
+
+    # Save
     if output_path is not None:
         result.to_csv(output_path, index=False)
-        print(f"✔ Saved KL-grade statistics to {output_path}")
+        print(f"✔ Saved KL statistics to {output_path}")
 
     return result
 
 
 
+
+
+
 def main():
 
-    DATASET_ROOT = "/vol/miltank/projects/practical_wise2526/knee-osteoarthritis-severity/data/cleaned_images_baseline"
-    OUTPUT_ROOT = "/vol/miltank/users/foca/adlm-knee-osteoarthritis/results/sampled_patientsMIP"
+    #DATASET_ROOT = "/vol/miltank/projects/practical_wise2526/knee-osteoarthritis-severity/data/cleaned_images_baseline"
+    #OUTPUT_ROOT = "/vol/miltank/users/foca/adlm-knee-osteoarthritis/results/sampled_patientsMIP"
     SIDE = "left"
 
-    file_path = "/vol/miltank/users/foca/adlm-knee-osteoarthritis/results/autoencoder/csv/mri_clusters_left.csv"
-    clinical="/vol/miltank/users/foca/adlm-knee-osteoarthritis/csv/clinical00_cleaned.csv"
-    df_clinical = pd.read_csv(clinical, sep = ',')
-    pat_clust = pd.read_csv(file_path)
+    # file_path = "/vol/miltank/users/foca/adlm-knee-osteoarthritis/results/autoencoder/csv/mri_clusters_left.csv"
+    # clinical="/vol/miltank/users/foca/adlm-knee-osteoarthritis/csv/clinical00_cleaned.csv"
+    clinical_local= "/Users/filippofocaccia/Desktop/adlm-knee-osteoarthritis/csv/clinical00_cleaned.csv"
+    df_clinical = pd.read_csv(clinical_local, sep = ',')
+    #pat_clust = pd.read_csv(file_path)
 
-    num_clusters = pat_clust["cluster"].nunique()
+    #num_clusters = pat_clust["cluster"].nunique()
     # sampled = extract_random_patients(pat_clust, num_clusters)
 
    
     
-    df_stats_left = compute_all_stats_by_kl(
+    compute_all_stats_by_kl(
         df_clinical,
         side="left",
-        output_path="/vol/miltank/users/foca/adlm-knee-osteoarthritis/csv/kl_clusters_left.csv"
+        output_path="/Users/filippofocaccia/Desktop/adlm-knee-osteoarthritis/csv/kl_clusters_left.csv"
 )
 
 
