@@ -80,6 +80,25 @@ def clusters_stats(
         for grade in [0, 1, 2, 3, 4]:
             row[f"{prefix}_{grade}_PCT"] = kl_counts.loc[grade] / len(group)
 
+        # ---------------------------------------------------------
+        # Average WOMAC for each KL grade in this cluster
+        # ---------------------------------------------------------
+        # Identify variable names from side
+        # e.g. V00WOMTSL (left) vs V00WOMTSR (right)
+        womac_col = f"V00WOMTS{side.upper()[0]}"  # L or R
+        # e.g. V00XRKL_L (left) vs V00XRKL_R (right)
+        kl_col = f"V00XRKL_{side.upper()[0]}"     # L or R
+
+        for grade in [0, 1, 2, 3, 4]:
+            subgroup = group[group[kl_col] == grade]
+            if len(subgroup) > 0:
+                mean_val = subgroup[womac_col].mean()
+            else:
+                mean_val = np.nan  # or 0.0, but NaN is safer for "no patients"
+            
+            # Column name example: KL_0_WOMAC_AVG
+            row[f"KL_{grade}_WOMAC_AVG"] = mean_val
+
         # ALL_L / ALL_R stats
         all_stats = compute_all_statistics(group, side)
 
