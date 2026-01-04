@@ -120,13 +120,13 @@ def iter_mri_dataset_with_tabular_variable(dataset_root, side="left", max_patien
     else:
         raise ValueError("side must be 'left' or 'right'")
 
-    # Load the clinical data
+    # Load the clinical data.
     df = pd.read_csv(clinical_csv_path)
     df.columns = df.columns.str.strip()
 
     df["ID"] = df["ID"].astype(str)
 
-    # keep only patients that exist in both MRI and clinical CSV
+    # Keep only patients that exist in both MRI and clinical CSV.
     valid_ids = set(df["ID"].tolist())
     all_ids = [pid for pid in all_ids if pid in valid_ids]
 

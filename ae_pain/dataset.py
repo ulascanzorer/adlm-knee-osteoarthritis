@@ -11,7 +11,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
-from data import list_patient_ids_fast, load_single_patient_mri
+from ae_pain.data import list_patient_ids_fast, load_single_patient_mri
 
 
 EXCLUDE_L = {

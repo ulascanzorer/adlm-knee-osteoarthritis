@@ -10,13 +10,13 @@ if PROJECT_ROOT not in sys.path:
 from ae_filippo.model import Autoencoder3D
 
 
-class PainHead(nn.Module):
+class TabularHead(nn.Module):
     """
-    Simple regression head on top of the bottleneck z.
+    Simple regression head on top of the bottleneck z. This is used to predict a tabular variable from the latent space.
 
     We do global average pooling over (D, H, W) and then a Linear layer.
     Input z: (B, C, D', H', W')
-    Output:  (B, num_outputs) - KOOS Pain score
+    Output:  (B, num_outputs) - tabular variable
     """
 
     def __init__(self, latent_channels: int, num_outputs: int = 1):
@@ -31,22 +31,22 @@ class PainHead(nn.Module):
         out = self.fc(pooled)  # (B, num_outputs)
         return out
 
-class PainEncoder(nn.Module):
+class TabularEncoder(nn.Module):
     """
-    Pain Encoder with minimal architecture.
+    Tabular Encoder with minimal architecture. Takes a scalar tabular variable as input and outputs a latent vector.
         
     Args:
-        pain_latent_dim (int): Dimension of the pain latent space (default: 4)
+        tabular_latent_dim (int): Dimension of the tabular latent space (default: 4)
         hidden_dim (int): Dimension of the single hidden layer (default: 32)
     """
     
-    def __init__(self, pain_latent_dim=4, hidden_dim=32):
-        super(PainEncoder, self).__init__()
+    def __init__(self, tabular_latent_dim=4, hidden_dim=32):
+        super(TabularEncoder, self).__init__()
         
         self.encoder = nn.Sequential(
             nn.Linear(1, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, pain_latent_dim)
+            nn.Linear(hidden_dim, tabular_latent_dim)
         )
         
         # Initialize weights
@@ -56,39 +56,39 @@ class PainEncoder(nn.Module):
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
     
-    def forward(self, pain_level):
+    def forward(self, tabular_var):
         """
-        Forward pass through the pain encoder.
+        Forward pass through the tabular encoder.
         
         Args:
-            pain_level: Tensor of shape (batch_size,) or (batch_size, 1)
+            tabular_var: Tensor of shape (batch_size,) or (batch_size, 1)
         
         Returns:
-            pain_latent: Tensor of shape (batch_size, pain_latent_dim)
+            tabular_latent: Tensor of shape (batch_size, tabular_latent_dim)
         """
-        if pain_level.dim() == 1:
-            pain_level = pain_level.unsqueeze(-1)
+        if tabular_var.dim() == 1:
+            tabular_var = tabular_var.unsqueeze(-1)
         
-        return self.encoder(pain_level)
+        return self.encoder(tabular_var)
 
 
-class AutoencoderWithPainInput(nn.Module):
+class AutoencoderWithTabularInput(nn.Module):
     """
     - reconstructs the MRI volume
-    - predicts pain from the bottleneck
+    - predicts tabular variable from the bottleneck
     """
 
     def __init__(
         self,
         base_ae: Autoencoder3D,
         latent_channels: int = 64,
-        num_pain_outputs: int = 1,
+        num_tabular_outputs: int = 1,
     ):
         super().__init__()
         self.encoder = base_ae.encoder
         self.decoder = base_ae.decoder
-        self.pain_encoder = PainEncoder()
-        self.pain_predictor = PainHead(latent_channels, num_pain_outputs)
+        self.tabular_encoder = TabularEncoder()
+        self.tabular_predictor = TabularHead(latent_channels, num_tabular_outputs)
 
         # Project concatenated features back to decoder's expected channels
         self.channel_projection = nn.Conv3d(
@@ -98,58 +98,58 @@ class AutoencoderWithPainInput(nn.Module):
             padding=0
         )
 
-    def forward(self, x: torch.Tensor, pain_level: torch.Tensor):
+    def forward(self, x: torch.Tensor, tabular_var: torch.Tensor):
         """
         Args:
             x: (B, 1, D, 224, 224), normalized to [-1, 1]
 
         Returns:
             x_hat:     reconstructed volume, same shape as x
-            pain_pred: (B, num_pain_outputs)
+            tabular_pred: (B, num_tabular_outputs)
             z:         latent tensor (B, C, D', H', W')
         """
         encoded_mri = self.encoder(x)
-        encoded_pain = self.pain_encoder(pain_level)
+        encoded_tabular = self.tabular_encoder(tabular_var)
 
         # Get spatial dimensions from encoded MRI.
         B, C, D, H, W = encoded_mri.shape
         
-        # Reshape and broadcast pain to match spatial dimensions.
-        # (B, pain_dim) -> (B, pain_dim, 1, 1, 1) -> (B, pain_dim, D', H', W')
-        encoded_pain = encoded_pain.view(B, -1, 1, 1, 1)
-        encoded_pain = encoded_pain.expand(-1, -1, D, H, W)
+        # Reshape and broadcast tabular variable to match spatial dimensions.
+        # (B, tabular_dim) -> (B, tabular_dim, 1, 1, 1) -> (B, tabular_dim, D', H', W')
+        encoded_tabular = encoded_tabular.view(B, -1, 1, 1, 1)
+        encoded_tabular = encoded_tabular.expand(-1, -1, D, H, W)
         
         # Now concatenate along channel dimension.
-        z = torch.cat([encoded_mri, encoded_pain], dim=1)  # (B, C+pain_dim, D', H', W')
+        z = torch.cat([encoded_mri, encoded_tabular], dim=1)  # (B, C+tabular_dim, D', H', W')
 
         # Project back to 64 channels for decoder
         z = self.channel_projection(z)  # (B, 64, D', H', W')
         x_hat = self.decoder(z)
-        pain_pred = self.pain_predictor(z)
-        return x_hat, pain_pred, z
+        tabular_pred = self.tabular_predictor(z)
+        return x_hat, tabular_pred, z
 
 
-def build_pain_input_ae(
+def build_tabular_input_ae(
     pretrained_ae_path: str | None,
     device: torch.device,
     in_channels: int = 1,
     latent_channels: int = 64,
-    num_pain_outputs: int = 1,
-) -> AutoencoderWithPainInput:
+    num_tabular_outputs: int = 1,
+) -> AutoencoderWithTabularInput:
 
     base_ae = Autoencoder3D(in_channels=in_channels, latent_channels=latent_channels)
 
     if pretrained_ae_path is not None:
         state = torch.load(pretrained_ae_path, map_location=device)
         base_ae.load_state_dict(state)
-        print(f"[build_pain_ae] Loaded pretrained AE from {pretrained_ae_path}")
+        print(f"[build_tabular_input_ae] Loaded pretrained AE from {pretrained_ae_path}")
 
     base_ae.to(device)
 
-    model = AutoencoderWithPainInput(
+    model = AutoencoderWithTabularInput(
         base_ae=base_ae,
         latent_channels=latent_channels,
-        num_pain_outputs=num_pain_outputs,
+        num_tabular_outputs=num_tabular_outputs,
     ).to(device)
 
     return model

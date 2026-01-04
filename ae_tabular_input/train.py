@@ -15,7 +15,7 @@ if PROJECT_ROOT not in sys.path:
 
 
 from ae_pain.dataset import KneeMRIPainDataset
-from ae_pain_input.model import build_pain_input_ae
+from ae_tabular_input.model import build_tabular_input_ae
 from ae_filippo.save import save_reconstruction
 from ae_filippo.data_t import KneeMRIDataset as PlainMRIDataset
 
@@ -40,13 +40,13 @@ class ReconWrapper(torch.nn.Module):
         x_hat, _, _ = self.m(x)
         return x_hat, None
 
-def train_pain_input_autoencoder(
+def train_tabular_input_autoencoder(
     model,
     train_loader,
     val_loader=None,
     num_epochs=50,
     lr=1e-4,
-    lambda_pain=0.5,
+    lambda_tabular=0.5,
     device="cuda",
     use_amp=True,
     recon_dataset=None,
@@ -54,7 +54,7 @@ def train_pain_input_autoencoder(
     phase_name="train"
 ):
     recon_criterion = nn.MSELoss()
-    pain_criterion = nn.MSELoss()
+    tabular_criterion = nn.MSELoss()
 
     optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
     
@@ -70,7 +70,7 @@ def train_pain_input_autoencoder(
         # ----------------- TRAIN -----------------
         model.train()
         train_recon_sum = 0.0
-        train_pain_sum = 0.0
+        train_tabular_sum = 0.0
 
         pbar = tqdm(train_loader, desc=f"[{phase_name}] Epoch {epoch}/{num_epochs}")
 
@@ -81,36 +81,36 @@ def train_pain_input_autoencoder(
             optimizer.zero_grad()
 
             with autocast(enabled=use_amp):
-                x_hat, pain_pred, _ = model(x=x, pain_level=y)
+                x_hat, tabular_pred, _ = model(x=x, tabular_var=y)
                 
                 loss_recon = recon_criterion(x_hat, x)
-                loss_pain = pain_criterion(pain_pred, y)
+                loss_tabular = tabular_criterion(tabular_pred, y)
                 
                 # Weighted Sum
-                loss = loss_recon + lambda_pain * loss_pain
+                loss = loss_recon + lambda_tabular * loss_tabular
 
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
 
             train_recon_sum += loss_recon.item()
-            train_pain_sum += loss_pain.item()
+            train_tabular_sum += loss_tabular.item()
 
         train_recon = train_recon_sum / len(train_loader)
-        train_pain_raw = train_pain_sum / len(train_loader)
-        train_pain_scaled = lambda_pain * train_pain_raw
-        train_total = train_recon + train_pain_scaled
+        train_tabular_raw = train_tabular_sum / len(train_loader)
+        train_tabular_scaled = lambda_tabular * train_tabular_raw
+        train_total = train_recon + train_tabular_scaled
 
         print(
             f"[{phase_name} Epoch {epoch}] Train: recon={train_recon:.6f}, "
-            f"lambda*pain={train_pain_scaled:.6f}, total={train_total:.6f}"
+            f"lambda*tabular={train_tabular_scaled:.6f}, total={train_total:.6f}"
         )
 
         # ----------------- VALIDATION -----------------
         if val_loader is not None and len(val_loader) > 0:
             model.eval()
             val_recon_sum = 0.0
-            val_pain_sum = 0.0
+            val_tabular_sum = 0.0
 
             with torch.no_grad():
                 for x, y in val_loader:
@@ -118,21 +118,21 @@ def train_pain_input_autoencoder(
                     y = y.to(device, non_blocking=True)
 
                     with autocast(enabled=use_amp):
-                        x_hat, pain_pred, _ = model(x=x, pain_level=y)
+                        x_hat, tabular_pred, _ = model(x=x, tabular_var=y)
                         loss_recon = recon_criterion(x_hat, x)
-                        loss_pain = pain_criterion(pain_pred, y)
+                        loss_tabular = tabular_criterion(tabular_pred, y)
 
                     val_recon_sum += loss_recon.item()
-                    val_pain_sum += loss_pain.item()
+                    val_tabular_sum += loss_tabular.item()
 
             val_recon = val_recon_sum / len(val_loader)
-            val_pain_raw = val_pain_sum / len(val_loader)
-            val_pain_scaled = lambda_pain * val_pain_raw
-            val_total = val_recon + val_pain_scaled
+            val_tabular_raw = val_tabular_sum / len(val_loader)
+            val_tabular_scaled = lambda_tabular * val_tabular_raw
+            val_total = val_recon + val_tabular_scaled
 
             print(
                 f"[{phase_name} Epoch {epoch}] Val:   recon={val_recon:.6f}, "
-                f"lambda*pain={val_pain_scaled:.6f}, total={val_total:.6f}"
+                f"lambda*tabular={val_tabular_scaled:.6f}, total={val_total:.6f}"
             )
 
             scheduler.step(val_total)
@@ -140,7 +140,7 @@ def train_pain_input_autoencoder(
             # Save best model for this phase
             if val_total < best_val_loss:
                 best_val_loss = val_total
-                best_path = os.path.join("weights_pain_ae", f"best_pain_input_ae_{phase_name}.pth")
+                best_path = os.path.join("weights_tabular_input_ae", f"best_tabular_input_ae_{phase_name}.pth")
                 torch.save(model.state_dict(), best_path)
                 print(f"New best model saved to {best_path}")
 
@@ -179,12 +179,12 @@ def main():
     
     batch_size = 8
     num_workers = 8  
-    lambda_pain = 5.0   
+    lambda_tabular = 5.0   
     pretrained_ae_path = None   # Let's train everything from scratch.
     
     # Output Paths
-    out_dir = "weights_pain_input_ae"
-    recon_outdir = "recon_samples_pain_input"
+    out_dir = "weights_tabular_input_ae"
+    recon_outdir = "recon_samples_tabular_input"
     os.makedirs(out_dir, exist_ok=True)
 
     device = get_device()
@@ -245,34 +245,34 @@ def main():
 
     # ----------------- BUILD MODEL -----------------
     print("Building model...")
-    model = build_pain_input_ae(
+    model = build_tabular_input_ae(
         pretrained_ae_path=pretrained_ae_path,
         device=torch.device(device),
         in_channels=1,
         latent_channels=64,
-        num_pain_outputs=1,
+        num_tabular_outputs=1,
     )
 
     num_epochs = 1  # TODO: Increase this.   
 
         
-    model = train_pain_input_autoencoder(
+    model = train_tabular_input_autoencoder(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
         num_epochs=num_epochs,       
         lr=1e-4,
-        lambda_pain=lambda_pain,        
+        lambda_tabular=lambda_tabular,        
         device=device,
         use_amp=is_cuda,
         recon_dataset=recon_set,
         recon_outdir=recon_outdir,
-        phase_name="phase1_warmup"
+        phase_name="training_phase"
     )
 
 
     # ----------------- FINISH -----------------
-    final_path = os.path.join(out_dir, f"final_pain_input_ae_{num_epochs}_epochs.pth")
+    final_path = os.path.join(out_dir, f"final_tabular_input_ae_{num_epochs}_epochs.pth")
     torch.save(model.state_dict(), final_path)
     print(f"\nDONE. Final model saved to {final_path}")
 

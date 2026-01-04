@@ -6,13 +6,13 @@ import numpy as np
 import pandas as pd
 import torch
 
-from infer import run_inference
-from cluster import run_kmeans, clusters_stats
-from tsne_visualization import tsne_plot_with_clusters
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
 
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.append(project_root)
+from tabular_input_inference.infer import run_inference
+from inference.cluster import run_kmeans, clusters_stats
+from inference.tsne_visualization import tsne_plot_with_clusters
 
 
 def load_features_npz(features_dir: str, side: str) -> tuple[np.ndarray, np.ndarray]:
@@ -129,7 +129,7 @@ def main() -> None:
         "--side",
         type=str,
         choices=["left", "right", "both"],
-        default="both",
+        default="left",
         help="Which side(s) to process",
     )
     parser.add_argument(
@@ -143,6 +143,12 @@ def main() -> None:
         type=str,
         default="csv/clinical00_cleaned.csv",
         help="Path to cleaned clinical CSV.",
+    )
+    parser.add_argument(
+        "--tabular_var",
+        type=str,
+        default="V00KOOSKPL",
+        help="Tabular variable to use (default is the KOOS pain score)",
     )
     parser.add_argument(
         "--k",
@@ -162,14 +168,14 @@ def main() -> None:
 
     # Choose default weights if none provided
     if args.weights_path is None:
-        weights_path = "./weights_pain_input_ae/final_pain_input_ae_1_epochs.pth"
+        weights_path = "./weights_tabular_input_ae/final_tabular_input_ae_1_epochs.pth"
     else:
         weights_path = args.weights_path
 
     print(f"Weights: {weights_path}")
 
     # Base results dir per model name
-    results_dir = os.path.join("results", "pain_input_ae")
+    results_dir = os.path.join("results", "tabular_input_ae")
 
     # Subdirs for different artifact types
     features_dir = os.path.join(results_dir, "features")
@@ -190,6 +196,7 @@ def main() -> None:
         run_inference(
             data_root=args.data_root,
             clinical_csv_path=args.clinical_csv,
+            tabular_variable=args.tabular_var,
             side=side,
             weights_path=weights_path,
             max_patients=args.max_patients,

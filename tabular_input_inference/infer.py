@@ -4,18 +4,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from data import iter_mri_dataset_with_tabular_variable
-from typing import Literal
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
 
-
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.append(project_root)
-
-ModelName = Literal["resnet50", "autoencoder"]
-
-sys.path.append(os.path.abspath("MedicalNet"))
-#from models.resnet import resnet50
+from tabular_input_inference.data import iter_mri_dataset_with_tabular_variable
 
 
 def build_feature_extractor(
@@ -26,14 +19,14 @@ def build_feature_extractor(
     Return a model that, given vol [B, 1, D, H, W], outputs an embedding [B, F].
     All model-specific stuff stays in here.
     """    
-    from ae_pain_input.model import build_pain_input_ae
+    from ae_tabular_input.model import build_tabular_input_ae
 
     # You can adjust latent_channels / num_pain_outputs as needed
-    model = build_pain_input_ae(
+    model = build_tabular_input_ae(
         pretrained_ae_path=None,
         device=device,
         latent_channels=64,
-        num_pain_outputs=1,
+        num_tabular_outputs=1,
     )
 
     state_dict = torch.load(weights_path, map_location=device)
@@ -53,18 +46,18 @@ def extract_features(
     Forward one volume and the tabular variable through the model and return a [1, F] embedding tensor.
     """
     encoded_mri = model.encoder(vol)
-    encoded_pain = model.pain_encoder(tabular_variable)
+    encoded_tabular = model.tabular_encoder(tabular_variable)
 
     # Get spatial dimensions from encoded MRI.
     B, C, D, H, W = encoded_mri.shape
     
-    # Reshape and broadcast pain to match spatial dimensions.
-    # (B, pain_dim) -> (B, pain_dim, 1, 1, 1) -> (B, pain_dim, D', H', W')
-    encoded_pain = encoded_pain.view(B, -1, 1, 1, 1)
-    encoded_pain = encoded_pain.expand(-1, -1, D, H, W)
+    # Reshape and broadcast tabular to match spatial dimensions.
+    # (B, tabular_dim) -> (B, tabular_dim, 1, 1, 1) -> (B, tabular_dim, D', H', W')
+    encoded_tabular = encoded_tabular.view(B, -1, 1, 1, 1)
+    encoded_tabular = encoded_tabular.expand(-1, -1, D, H, W)
     
     # Now concatenate along channel dimension.
-    z = torch.cat([encoded_mri, encoded_pain], dim=1)  # (B, C+pain_dim, D', H', W')
+    z = torch.cat([encoded_mri, encoded_tabular], dim=1)  # (B, C+tabular_dim, D', H', W')
 
     # Project back to 64 channels for decoder
     z = model.channel_projection(z)  # (B, 64, D', H', W')
@@ -76,13 +69,14 @@ def extract_features(
 def run_inference(
     data_root: str,
     clinical_csv_path: str,
+    tabular_variable: str,
     side: str,
     weights_path: str = "MedicalNet/pretrain/resnet_50.pth",
     max_patients: int | None = None,
     features_dir: str = "features",
 ) -> str:
     """
-    Run inference on MRIs for a given side using a feature extractor and save latent features.
+    Run inference on MRIs for a given side combined with a tabular variable using a feature extractor and save latent features.
 
     Saves:
         {features_dir}/features_{side}.npz
@@ -92,25 +86,26 @@ def run_inference(
     Returns:
         Path to the saved .npz file.
     """
-    # Build feature extractor for the chosen model
+    
+    # Build feature extractor.
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = build_feature_extractor(
         weights_path=weights_path,
         device=device,
     )   # NOTE: This model takes both the mri image and a tabular value (for example KOOS pain score) as input.
 
-    print(f"[{side}] Streaming MRIs and pain levels from {data_root} ...")
+    print(f"[{side}] Streaming MRIs and tabular variable {tabular_variable} from {data_root} ...")
 
     patients_features: dict[str, torch.Tensor] = {}
     processed = 0
 
     with torch.no_grad():
-        for p_id, vol, pain_level in iter_mri_dataset_with_tabular_variable(
+        for p_id, vol, tabular_value in iter_mri_dataset_with_tabular_variable(
             data_root,
             side=side,
             max_patients=max_patients,
-            tabular_variable="V00KOOSKPL",
-            clinical_csv_path="./csv/clinical00_cleaned.csv",
+            tabular_variable=tabular_variable,
+            clinical_csv_path=clinical_csv_path,
         ):
             # vol: [1, D, 224, 224] -> [1, 1, D, 224, 224]
             vol = vol.unsqueeze(0).to(device)
@@ -119,7 +114,7 @@ def run_inference(
             feats = extract_features(
                 model=model,
                 vol=vol,
-                tabular_variable=pain_level,
+                tabular_variable=tabular_value,
             )
 
             patients_features[p_id] = feats.cpu()

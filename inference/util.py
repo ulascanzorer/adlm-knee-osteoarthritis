@@ -9,7 +9,12 @@ import pydicom
 import numpy as np
 from PIL import Image
 import json
-from score import compute_surgery_percentages, compute_all_statistics
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
+
+from inference.score import compute_surgery_percentages, compute_all_statistics
 
 # Load the JSON file with variable definitions
 with open("variables.json", "r") as file:

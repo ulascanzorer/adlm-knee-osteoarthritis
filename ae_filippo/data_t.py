@@ -1,8 +1,15 @@
-from data import iter_mri_dataset, load_single_patient_mri
 import torch
 from torch.utils.data import Dataset
 import random
 import os
+import sys
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
+
+from ae_filippo.data import iter_mri_dataset, load_single_patient_mri
+
 def list_patient_ids_fast(dataset_root, side="left", max_patients=None):
     subset_dirs = [
         d for d in os.listdir(dataset_root)

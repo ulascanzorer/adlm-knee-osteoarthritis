@@ -4,13 +4,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from data import iter_mri_dataset
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
+
+from inference.data import iter_mri_dataset
 from typing import Literal
-
-
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.append(project_root)
 
 ModelName = Literal["resnet50", "autoencoder"]
 

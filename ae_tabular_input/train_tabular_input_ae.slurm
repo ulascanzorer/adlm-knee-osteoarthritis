@@ -1,8 +1,8 @@
 #!/bin/bash
 
-#SBATCH --job-name=knee_pain_input_ae_train
-#SBATCH --output=train_pain_input_ae_%j.out
-#SBATCH --error=train_pain_input_ae_%j.err
+#SBATCH --job-name=knee_tabular_input_ae_train
+#SBATCH --output=train_tabular_input_ae_%j.out
+#SBATCH --error=train_tabular_input_ae_%j.err
 #SBATCH --qos=master-queuesave
 #SBATCH --time=0-14:00:00
 #SBATCH --gres=gpu:1
@@ -28,9 +28,9 @@ echo
 
 cd /vol/miltank/users/$USER/Documents/adlm-knee-osteoarthritis
 
-echo "STARTING PAIN-INPUT AE TRAINING"
-echo "Running ae_pain_input/train.py..."
+echo "STARTING TABULAR-INPUT AE TRAINING"
+echo "Running ae_tabular_input/train.py..."
 
-python ae_pain_input/train.py
+python ae_tabular_input/train.py
 
 echo "Training DONE"

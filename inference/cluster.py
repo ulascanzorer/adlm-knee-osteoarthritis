@@ -1,7 +1,12 @@
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
-from score import (
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(PROJECT_ROOT)
+
+from inference.score import (
     compute_surgery_percentages,
     compute_kl_distribution,
     compute_all_statistics

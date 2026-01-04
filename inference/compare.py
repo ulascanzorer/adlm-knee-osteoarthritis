@@ -7,9 +7,6 @@ from sklearn.model_selection import cross_val_score, StratifiedKFold, KFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.append(project_root)
 
 def load_and_merge_data(feature_path, clinical_csv_path, target_col):
     """
