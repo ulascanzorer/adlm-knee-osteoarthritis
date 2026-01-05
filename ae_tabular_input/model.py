@@ -83,17 +83,21 @@ class AutoencoderWithTabularInput(nn.Module):
         base_ae: Autoencoder3D,
         latent_channels: int = 64,
         num_tabular_outputs: int = 1,
+        tabular_latent_dim: int = 4,
     ):
         super().__init__()
         self.encoder = base_ae.encoder
         self.decoder = base_ae.decoder
-        self.tabular_encoder = TabularEncoder()
+
+        self.tabular_latent_dim = tabular_latent_dim
+
+        self.tabular_encoder = TabularEncoder(tabular_latent_dim=self.tabular_latent_dim)
         self.tabular_predictor = TabularHead(latent_channels, num_tabular_outputs)
 
-        # Project concatenated features back to decoder's expected channels
+        # Project concatenated features back to decoder's expected channels. This way the model can hopefully learn how to kind of mix the encoding of the MRI and the encoding of the tabular input.
         self.channel_projection = nn.Conv3d(
-            in_channels=latent_channels + 4,  # 68 by default
-            out_channels=latent_channels,  # 64 by default
+            in_channels=latent_channels + self.tabular_latent_dim,
+            out_channels=latent_channels,
             kernel_size=1,
             padding=0
         )
@@ -122,7 +126,7 @@ class AutoencoderWithTabularInput(nn.Module):
         # Now concatenate along channel dimension.
         z = torch.cat([encoded_mri, encoded_tabular], dim=1)  # (B, C+tabular_dim, D', H', W')
 
-        # Project back to 64 channels for decoder
+        # Project back to 64 channels for decoder.
         z = self.channel_projection(z)  # (B, 64, D', H', W')
         x_hat = self.decoder(z)
         tabular_pred = self.tabular_predictor(z)

@@ -170,7 +170,7 @@ def train_tabular_input_autoencoder(
 def main():
     data_root = "/vol/miltank/projects/practical_wise2526/knee-osteoarthritis-severity/data/cleaned_images_baseline"
     clinical_csv_path = "./csv/clinical00_cleaned.csv"
-    tabular_variable = "V00KOOSKPL"  # KOOS Pain Score
+    tabular_variable = "V00KOOSKPL"  # KOOS Pain Score for example.
     side = "left"
     
 
@@ -179,7 +179,7 @@ def main():
     
     batch_size = 8
     num_workers = 8  
-    lambda_tabular = 5.0   
+    lambda_tabular = 0.5    # Weight for tabular input loss.   
     pretrained_ae_path = None   # Let's train everything from scratch.
     
     # Output Paths
@@ -253,7 +253,7 @@ def main():
         num_tabular_outputs=1,
     )
 
-    num_epochs = 1  # TODO: Increase this.   
+    num_epochs = 50  # NOTE: Can play with this.   
 
         
     model = train_tabular_input_autoencoder(
