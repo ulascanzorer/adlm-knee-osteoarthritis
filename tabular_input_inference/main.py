@@ -111,7 +111,7 @@ def run_tsne(features_dir: str, csv_dir: str, plots_dir: str, side: str,
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Full MRI pipeline: inference, clustering, stats, t-SNE"
+        description="Full MRI + tabular input pipeline: inference, clustering, stats, t-SNE"
     )
     parser.add_argument(
         "--data_root",
@@ -168,7 +168,7 @@ def main() -> None:
 
     # Choose default weights if none provided
     if args.weights_path is None:
-        weights_path = "./weights_tabular_input_ae/final_tabular_input_ae_1_epochs.pth"
+        weights_path = "./weights_tabular_input_ae/best_tabular_input_ae_training_phase.pth"
     else:
         weights_path = args.weights_path
 

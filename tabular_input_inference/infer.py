@@ -21,7 +21,7 @@ def build_feature_extractor(
     """    
     from ae_tabular_input.model import build_tabular_input_ae
 
-    # You can adjust latent_channels / num_pain_outputs as needed
+    # You can adjust latent_channels / num_tabular_outputs as needed
     model = build_tabular_input_ae(
         pretrained_ae_path=None,
         device=device,
@@ -59,10 +59,10 @@ def extract_features(
     # Now concatenate along channel dimension.
     z = torch.cat([encoded_mri, encoded_tabular], dim=1)  # (B, C+tabular_dim, D', H', W')
 
-    # Project back to 64 channels for decoder
-    z = model.channel_projection(z)  # (B, 64, D', H', W')
+    # Project back to 64 channels for decoder.
+    z = model.channel_projection(z)  # Shape of z is (B, 64, D', H', W').
 
-    z = z.mean(dim=(2, 3, 4))
+    z = z.mean(dim=(2, 3, 4))   # Shape of z is (B, 64).
     return z
 
 
@@ -92,7 +92,7 @@ def run_inference(
     model = build_feature_extractor(
         weights_path=weights_path,
         device=device,
-    )   # NOTE: This model takes both the mri image and a tabular value (for example KOOS pain score) as input.
+    )   # NOTE: This model takes both the mri image and a single scalar tabular value (for example KOOS pain score) as input.
 
     print(f"[{side}] Streaming MRIs and tabular variable {tabular_variable} from {data_root} ...")
 
@@ -126,7 +126,7 @@ def run_inference(
         os.makedirs(features_dir, exist_ok=True)
         return os.path.join(features_dir, f"features_{side}.npz")
 
-    # Save latent features
+    # Save latent features.
     os.makedirs(features_dir, exist_ok=True)
     feat_out = os.path.join(features_dir, f"features_{side}.npz")
 
