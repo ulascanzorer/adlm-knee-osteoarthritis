@@ -94,7 +94,7 @@ class AutoencoderWithTabularInput(nn.Module):
         self.tabular_encoder = TabularEncoder(tabular_latent_dim=self.tabular_latent_dim)
         self.tabular_predictor = TabularHead(latent_channels, num_tabular_outputs)
 
-        # Project concatenated features back to decoder's expected channels. This way the model can hopefully learn how to kind of mix the encoding of the MRI and the encoding of the tabular input.
+        # Project concatenated features back to decoder's expected channels. This way the model can hopefully learn how to mix the encoding of the MRI and the encoding of the tabular input.
         self.channel_projection = nn.Conv3d(
             in_channels=latent_channels + self.tabular_latent_dim,
             out_channels=latent_channels,
