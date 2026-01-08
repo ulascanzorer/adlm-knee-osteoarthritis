@@ -14,7 +14,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
 
-from ae_pain.dataset import KneeMRIPainDataset
+from ae_tabular_input.dataset import KneeMRITabularDataset
 from ae_tabular_input.model import build_tabular_input_ae
 from ae_filippo.save import save_reconstruction
 from ae_filippo.data_t import KneeMRIDataset as PlainMRIDataset
@@ -170,7 +170,7 @@ def train_tabular_input_autoencoder(
 def main():
     data_root = "/vol/miltank/projects/practical_wise2526/knee-osteoarthritis-severity/data/cleaned_images_baseline"
     clinical_csv_path = "./csv/clinical00_cleaned.csv"
-    tabular_variable = "V00KOOSKPL"  # KOOS Pain Score for example.
+    tabular_variables = ["V00KOOSKPL"]  # Only the KOOS Pain Score for example.
     side = "left"
     
 
@@ -200,19 +200,19 @@ def main():
     # ----------------- LOAD DATA -----------------
     print(f"Loading datasets (Max patients: {max_patients if max_patients else 'ALL'})...")
     
-    train_set = KneeMRIPainDataset(
+    train_set = KneeMRITabularDataset(
         root=data_root, 
         clinical_csv_path=clinical_csv_path, 
-        tabular_variable=tabular_variable, 
+        tabular_variables=tabular_variables, 
         side=side, 
         split="train", 
         max_patients=max_patients
     )
     
-    val_set = KneeMRIPainDataset(
+    val_set = KneeMRITabularDataset(
         root=data_root, 
         clinical_csv_path=clinical_csv_path, 
-        tabular_variable=tabular_variable, 
+        tabular_variables=tabular_variables, 
         side=side, 
         split="val", 
         max_patients=max_patients
@@ -250,10 +250,11 @@ def main():
         device=torch.device(device),
         in_channels=1,
         latent_channels=64,
+        num_tabular_inputs=len(tabular_variables),
         num_tabular_outputs=1,
     )
 
-    num_epochs = 50  # NOTE: Can play with this.   
+    num_epochs = 50  # NOTE: Can play with this.
 
         
     model = train_tabular_input_autoencoder(

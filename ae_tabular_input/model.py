@@ -36,15 +36,16 @@ class TabularEncoder(nn.Module):
     Tabular Encoder with minimal architecture. Takes a scalar tabular variable as input and outputs a latent vector.
         
     Args:
+        num_tabular_input (int): Number of tabular inputs (default: 1)
         tabular_latent_dim (int): Dimension of the tabular latent space (default: 4)
         hidden_dim (int): Dimension of the single hidden layer (default: 32)
     """
     
-    def __init__(self, tabular_latent_dim=4, hidden_dim=32):
+    def __init__(self, num_tabular_input=1, tabular_latent_dim=4, hidden_dim=32):
         super(TabularEncoder, self).__init__()
         
         self.encoder = nn.Sequential(
-            nn.Linear(1, hidden_dim),
+            nn.Linear(num_tabular_input, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, tabular_latent_dim)
         )
@@ -56,20 +57,20 @@ class TabularEncoder(nn.Module):
                 if m.bias is not None:
                     nn.init.constant_(m.bias, 0)
     
-    def forward(self, tabular_var):
+    def forward(self, tabular_variables):
         """
         Forward pass through the tabular encoder.
         
         Args:
-            tabular_var: Tensor of shape (batch_size,) or (batch_size, 1)
+            tabular_variables: Tensor of shape (batch_size, num_tabular_input)
         
         Returns:
             tabular_latent: Tensor of shape (batch_size, tabular_latent_dim)
         """
-        if tabular_var.dim() == 1:
-            tabular_var = tabular_var.unsqueeze(-1)
+        if tabular_variables.dim() == 1:
+            tabular_variables = tabular_variables.unsqueeze(-1)
         
-        return self.encoder(tabular_var)
+        return self.encoder(tabular_variables)
 
 
 class AutoencoderWithTabularInput(nn.Module):
@@ -82,6 +83,7 @@ class AutoencoderWithTabularInput(nn.Module):
         self,
         base_ae: Autoencoder3D,
         latent_channels: int = 64,
+        num_tabular_inputs: int = 1,
         num_tabular_outputs: int = 1,
         tabular_latent_dim: int = 4,
     ):
@@ -89,9 +91,10 @@ class AutoencoderWithTabularInput(nn.Module):
         self.encoder = base_ae.encoder
         self.decoder = base_ae.decoder
 
+        self.num_tabular_inputs = num_tabular_inputs
         self.tabular_latent_dim = tabular_latent_dim
 
-        self.tabular_encoder = TabularEncoder(tabular_latent_dim=self.tabular_latent_dim)
+        self.tabular_encoder = TabularEncoder(num_tabular_input=self.num_tabular_inputs, tabular_latent_dim=self.tabular_latent_dim)
         self.tabular_predictor = TabularHead(latent_channels, num_tabular_outputs)
 
         # Project concatenated features back to decoder's expected channels. This way the model can hopefully learn how to mix the encoding of the MRI and the encoding of the tabular input.
@@ -102,7 +105,7 @@ class AutoencoderWithTabularInput(nn.Module):
             padding=0
         )
 
-    def forward(self, x: torch.Tensor, tabular_var: torch.Tensor):
+    def forward(self, x: torch.Tensor, tabular_variables: torch.Tensor):
         """
         Args:
             x: (B, 1, D, 224, 224), normalized to [-1, 1]
@@ -113,7 +116,7 @@ class AutoencoderWithTabularInput(nn.Module):
             z:         latent tensor (B, C, D', H', W')
         """
         encoded_mri = self.encoder(x)
-        encoded_tabular = self.tabular_encoder(tabular_var)
+        encoded_tabular = self.tabular_encoder(tabular_variables)   # (B, tabular_dim)
 
         # Get spatial dimensions from encoded MRI.
         B, C, D, H, W = encoded_mri.shape
@@ -138,7 +141,9 @@ def build_tabular_input_ae(
     device: torch.device,
     in_channels: int = 1,
     latent_channels: int = 64,
+    num_tabular_inputs: int = 1,
     num_tabular_outputs: int = 1,
+    tabular_latent_dim: int = 4,
 ) -> AutoencoderWithTabularInput:
 
     base_ae = Autoencoder3D(in_channels=in_channels, latent_channels=latent_channels)
@@ -153,7 +158,9 @@ def build_tabular_input_ae(
     model = AutoencoderWithTabularInput(
         base_ae=base_ae,
         latent_channels=latent_channels,
+        num_tabular_inputs=num_tabular_inputs,
         num_tabular_outputs=num_tabular_outputs,
+        tabular_latent_dim=tabular_latent_dim,
     ).to(device)
 
     return model
