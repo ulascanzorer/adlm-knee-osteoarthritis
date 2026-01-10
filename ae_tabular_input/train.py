@@ -27,19 +27,6 @@ def get_device():
         return "mps"
     return "cpu"
 
-class ReconWrapper(torch.nn.Module):
-    """
-    Wraps the pain-AE so that it matches Filippo's save_reconstruction
-    interface: forward(x) -> (recon, dummy).
-    """
-    def __init__(self, m: torch.nn.Module):
-        super().__init__()
-        self.m = m
-
-    def forward(self, x: torch.Tensor):
-        x_hat, _, _ = self.m(x)
-        return x_hat, None
-
 def train_tabular_input_autoencoder(
     model,
     train_loader,
