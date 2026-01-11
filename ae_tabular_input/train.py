@@ -134,23 +134,6 @@ def train_tabular_input_autoencoder(
         else:
             scheduler.step(train_total)
 
-        # ----------------------------------------------------
-        # SAVE RECONSTRUCTIONS, TODO: This has to be fixed since the model now expects the pain level as well as the mri image.
-        # ----------------------------------------------------
-        """ if recon_dataset is not None and recon_outdir is not None:
-            phase_dir = os.path.join(recon_outdir, phase_name, f"epoch_{epoch:02d}")
-            os.makedirs(phase_dir, exist_ok=True)
-
-            print(f"Saving recons to {phase_dir} ...")
-            recon_model = ReconWrapper(model)
-            save_reconstruction(
-                recon_model,
-                recon_dataset,
-                device,
-                outdir=phase_dir,
-                num_samples=5, 
-            ) """
-
     return model
 
 
