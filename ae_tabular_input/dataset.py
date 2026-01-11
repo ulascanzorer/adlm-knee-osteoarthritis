@@ -156,14 +156,35 @@ class KneeMRITabularDataset(Dataset):
             try:
                 y = []
                 for tabular_variable in self.tabular_variables:
-                    # TODO: Here we will have to deal with certain variables in certain ways, since their units are not always the same.
                     raw_value = float(self.clinical_dict[pid][tabular_variable])
-                    value = raw_value / 100.0 
+
+                    # Check if the tabular variable is continuous and between 0 and 100.
+                    if tabular_variable in ["V00WOMTSR", "V00KOOSKPR", "V00KOOSYMR", "V00KOOSQOL", "V00WOMTSL", "V00KOOSKPL", "V00KOOSYML"]:
+                        # Convert to 0-1 range.
+                        value = raw_value / 100.0
+                    
+                    # Check if the tabular variable is discrete and between 0-3.
+                    elif tabular_variable in ["V00XRJSL_R", "V00XRJSL_L", "V00XRJSM_R", "V00XRJSM_L"]:
+                        # Divide by max value to get 0-1 range, preserving ordinality
+                        value = raw_value / 3.0
+                    
+                    # Check if the tabular variable is discrete and between 0-4.
+                    elif tabular_variable in ["V00XRKL_R", "V00XRKL_L"]:
+                        # Divide by max value to get 0-1 range, preserving ordinality
+                        value = raw_value / 4.0
+
+                    # Check if the tabular variable is binary.
+                    elif tabular_variable in ["V99ERKVSAF", "V99ELKVSAF"]:
+                        # Already 0 or 1.
+                        value = raw_value
+
+                    else:
+                        raise ValueError(f"Unknown tabular variable: {tabular_variable}")
+
                     y.append(value)
-                y = torch.tensor(y, dtype=torch.float32)
-                
+
+                y = torch.tensor(y, dtype=torch.float32)             
                 return vol, y
-                
             except KeyError:
                 print(f"[Warning] Clinical data missing for {pid}. Skipping...")
                 idx = random.randint(0, len(self.patient_ids) - 1)
