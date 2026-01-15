@@ -183,7 +183,7 @@ class KneeMRITabularDataset(Dataset):
 
                     y.append(value)
 
-                y = torch.tensor(y, dtype=torch.float32)             
+                y = torch.tensor(y, dtype=torch.float32)
                 return vol, y
             except KeyError:
                 print(f"[Warning] Clinical data missing for {pid}. Skipping...")

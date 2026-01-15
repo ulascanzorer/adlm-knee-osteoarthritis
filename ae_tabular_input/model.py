@@ -10,26 +10,88 @@ if PROJECT_ROOT not in sys.path:
 from ae_filippo.model import Autoencoder3D
 
 
-class TabularHead(nn.Module):
+class WOMACHead(nn.Module):
     """
-    Simple regression head on top of the bottleneck z. This is used to predict a tabular variable from the latent space.
+    Simple regression head on top of the bottleneck z. This is used to predict the WOMAC score from the latent space.
 
     We do global average pooling over (D, H, W) and then a Linear layer.
     Input z: (B, C, D', H', W')
-    Output:  (B, num_outputs) - tabular variable
+    Output:  (B, 1) - WOMAC score
     """
 
-    def __init__(self, latent_channels: int, num_outputs: int = 1):
+    def __init__(self, latent_channels: int):
         super().__init__()
         self.pool = nn.AdaptiveAvgPool3d(1)  # -> (B, C, 1, 1, 1)
-        self.fc = nn.Linear(latent_channels, num_outputs)
+        self.fc = nn.Linear(latent_channels, 1)
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:
         # z: (B, C, D', H', W')
         pooled = self.pool(z)  # (B, C, 1, 1, 1)
         pooled = pooled.view(pooled.size(0), -1)  # (B, C)
-        out = self.fc(pooled)  # (B, num_outputs)
+        out = self.fc(pooled)  # (B, 1)
         return out
+
+
+class JSNHead(nn.Module):
+    """
+    Classification head for Joint Space Narrowing (JSN) on top of the bottleneck z.
+    Predicts class probabilities for 0, 1, 2, 3.
+
+    Input z: (B, C, D', H', W')
+    Output:  (B, 4) - logits for JSN classes
+    """
+
+    def __init__(self, latent_channels: int, num_classes: int = 4):
+        super().__init__()
+        self.pool = nn.AdaptiveAvgPool3d(1)  # -> (B, C, 1, 1, 1)
+        self.fc = nn.Linear(latent_channels, num_classes)
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        # z: (B, C, D', H', W')
+        pooled = self.pool(z)  # (B, C, 1, 1, 1)
+        pooled = pooled.view(pooled.size(0), -1)  # (B, C)
+        out = self.fc(pooled)  # (B, 4)
+        return out
+
+    def predict_probs(self, z: torch.Tensor) -> torch.Tensor:
+        """
+        Returns class probabilities for the given latent representation z.
+        output: (B, 4)
+        """
+        logits = self.forward(z)
+        probs = torch.softmax(logits, dim=1)
+        return probs
+
+
+class SurgeryHead(nn.Module):
+    """
+    Binary classification head for surgery prediction.
+    Predicts probability of surgery (class 1) vs no surgery (class 0).
+
+    Input z: (B, C, D', H', W')
+    Output:  (B, 1) - logits for surgery (use sigmoid for prob)
+    """
+
+    def __init__(self, latent_channels: int):
+        super().__init__()
+        self.pool = nn.AdaptiveAvgPool3d(1)
+        self.fc = nn.Linear(latent_channels, 1)
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        pooled = self.pool(z)
+        pooled = pooled.view(pooled.size(0), -1)
+        out = self.fc(pooled)
+        return out
+
+    def predict_probs(self, z: torch.Tensor) -> torch.Tensor:
+        """
+        Returns probability of surgery (class 1).
+        output: (B, 1)
+        """
+        logits = self.forward(z)
+        probs = torch.sigmoid(logits)
+        return probs
+
 
 class TabularEncoder(nn.Module):
     """
@@ -84,7 +146,6 @@ class AutoencoderWithTabularInput(nn.Module):
         base_ae: Autoencoder3D,
         latent_channels: int = 64,
         num_tabular_inputs: int = 1,
-        num_tabular_outputs: int = 1,
         tabular_latent_dim: int = 4,
     ):
         super().__init__()
@@ -95,7 +156,12 @@ class AutoencoderWithTabularInput(nn.Module):
         self.tabular_latent_dim = tabular_latent_dim
 
         self.tabular_encoder = TabularEncoder(num_tabular_input=self.num_tabular_inputs, tabular_latent_dim=self.tabular_latent_dim)
-        self.tabular_predictor = TabularHead(latent_channels, num_tabular_outputs)
+
+        # Different heads for predicting WOMAC score, joint space narrowing, and the binary surgery variable.
+        self.womac_predictor = WOMACHead(latent_channels)
+        self.jsn_predictor = JSNHead(latent_channels)
+        self.surgery_predictor = SurgeryHead(latent_channels)
+
 
         # Project concatenated features back to decoder's expected channels. This way the model can hopefully learn how to mix the encoding of the MRI and the encoding of the tabular input.
         self.channel_projection = nn.Conv3d(
@@ -112,7 +178,9 @@ class AutoencoderWithTabularInput(nn.Module):
 
         Returns:
             x_hat:     reconstructed volume, same shape as x
-            tabular_pred: (B, num_tabular_outputs)
+            womac_score: (B, 1)
+            jsn: (B, 1)
+            surgery: (B, 1)
             z:         latent tensor (B, C, D', H', W')
         """
         encoded_mri = self.encoder(x)
@@ -132,8 +200,12 @@ class AutoencoderWithTabularInput(nn.Module):
         # Project back to 64 channels for decoder.
         z = self.channel_projection(z)  # (B, 64, D', H', W')
         x_hat = self.decoder(z)
-        tabular_pred = self.tabular_predictor(z)
-        return x_hat, tabular_pred, z
+        
+        womac_pred = self.womac_predictor(z)
+        jsn_pred = self.jsn_predictor(z)
+        surgery_pred = self.surgery_predictor(z)
+        
+        return x_hat, womac_pred, jsn_pred, surgery_pred, z
 
 
 def build_tabular_input_ae(
@@ -142,7 +214,6 @@ def build_tabular_input_ae(
     in_channels: int = 1,
     latent_channels: int = 64,
     num_tabular_inputs: int = 1,
-    num_tabular_outputs: int = 1,
     tabular_latent_dim: int = 4,
 ) -> AutoencoderWithTabularInput:
 
@@ -159,7 +230,6 @@ def build_tabular_input_ae(
         base_ae=base_ae,
         latent_channels=latent_channels,
         num_tabular_inputs=num_tabular_inputs,
-        num_tabular_outputs=num_tabular_outputs,
         tabular_latent_dim=tabular_latent_dim,
     ).to(device)
 

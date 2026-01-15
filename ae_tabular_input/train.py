@@ -41,7 +41,9 @@ def train_tabular_input_autoencoder(
     phase_name="train"
 ):
     recon_criterion = nn.MSELoss()
-    tabular_criterion = nn.MSELoss()
+    womac_criterion = nn.MSELoss()
+    jsn_criterion = nn.CrossEntropyLoss()
+    surgery_criterion = nn.BCEWithLogitsLoss()
 
     optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
     
@@ -57,7 +59,9 @@ def train_tabular_input_autoencoder(
         # ----------------- TRAIN -----------------
         model.train()
         train_recon_sum = 0.0
-        train_tabular_sum = 0.0
+        train_womac_sum = 0.0
+        train_jsn_sum = 0.0
+        train_surgery_sum = 0.0
 
         pbar = tqdm(train_loader, desc=f"[{phase_name}] Epoch {epoch}/{num_epochs}")
 
@@ -68,36 +72,47 @@ def train_tabular_input_autoencoder(
             optimizer.zero_grad()
 
             with autocast(enabled=use_amp):
-                x_hat, tabular_pred, _ = model(x=x, tabular_var=y)
+                x_hat, womac_pred, jsn_pred, surgery_pred, _ = model(x=x, tabular_variables=y)
                 
+                # Unpack targets (Assumes order: WOMAC, JSN, Surgery)
+                target_womac = y[:, 0:1]
+                target_jsn = (y[:, 1] * 3).round().clamp(0, 3).long()   # This is so that the JSN is in the range [0, 3]
+                target_surgery = y[:, 2:3]
+
                 loss_recon = recon_criterion(x_hat, x)
-                loss_tabular = tabular_criterion(tabular_pred, y)
+                loss_womac = womac_criterion(womac_pred, target_womac)
+                loss_jsn = jsn_criterion(jsn_pred, target_jsn)
+                loss_surgery = surgery_criterion(surgery_pred, target_surgery)
                 
                 # Weighted Sum
-                loss = loss_recon + lambda_tabular * loss_tabular
+                loss = loss_recon + lambda_tabular * (loss_womac + loss_jsn + loss_surgery)
 
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
 
             train_recon_sum += loss_recon.item()
-            train_tabular_sum += loss_tabular.item()
+            train_womac_sum += loss_womac.item()
+            train_jsn_sum += loss_jsn.item()
+            train_surgery_sum += loss_surgery.item()
 
         train_recon = train_recon_sum / len(train_loader)
-        train_tabular_raw = train_tabular_sum / len(train_loader)
-        train_tabular_scaled = lambda_tabular * train_tabular_raw
-        train_total = train_recon + train_tabular_scaled
+        train_womac = train_womac_sum / len(train_loader)
+        train_jsn = train_jsn_sum / len(train_loader)
+        train_surgery = train_surgery_sum / len(train_loader)
 
         print(
             f"[{phase_name} Epoch {epoch}] Train: recon={train_recon:.6f}, "
-            f"lambda*tabular={train_tabular_scaled:.6f}, total={train_total:.6f}"
+            f"womac={train_womac:.6f}, jsn={train_jsn:.6f}, surgery={train_surgery:.6f}"
         )
 
         # ----------------- VALIDATION -----------------
         if val_loader is not None and len(val_loader) > 0:
             model.eval()
             val_recon_sum = 0.0
-            val_tabular_sum = 0.0
+            val_womac_sum = 0.0
+            val_jsn_sum = 0.0
+            val_surgery_sum = 0.0
 
             with torch.no_grad():
                 for x, y in val_loader:
@@ -105,34 +120,44 @@ def train_tabular_input_autoencoder(
                     y = y.to(device, non_blocking=True)
 
                     with autocast(enabled=use_amp):
-                        x_hat, tabular_pred, _ = model(x=x, tabular_var=y)
+                        x_hat, womac_pred, jsn_pred, surgery_pred, _ = model(x=x, tabular_variables=y)
+
+                        # Unpack targets
+                        target_womac = y[:, 0:1]
+                        target_jsn = (y[:, 1] * 3).round().long()
+                        target_surgery = y[:, 2:3]
+
                         loss_recon = recon_criterion(x_hat, x)
-                        loss_tabular = tabular_criterion(tabular_pred, y)
+                        loss_womac = womac_criterion(womac_pred, target_womac)
+                        loss_jsn = jsn_criterion(jsn_pred, target_jsn)
+                        loss_surgery = surgery_criterion(surgery_pred, target_surgery)
 
                     val_recon_sum += loss_recon.item()
-                    val_tabular_sum += loss_tabular.item()
+                    val_womac_sum += loss_womac.item()
+                    val_jsn_sum += loss_jsn.item()
+                    val_surgery_sum += loss_surgery.item()
 
             val_recon = val_recon_sum / len(val_loader)
-            val_tabular_raw = val_tabular_sum / len(val_loader)
-            val_tabular_scaled = lambda_tabular * val_tabular_raw
-            val_total = val_recon + val_tabular_scaled
+            val_womac = val_womac_sum / len(val_loader)
+            val_jsn = val_jsn_sum / len(val_loader)
+            val_surgery = val_surgery_sum / len(val_loader)
 
             print(
                 f"[{phase_name} Epoch {epoch}] Val:   recon={val_recon:.6f}, "
-                f"lambda*tabular={val_tabular_scaled:.6f}, total={val_total:.6f}"
+                f"womac={val_womac:.6f}, jsn={val_jsn:.6f}, surgery={val_surgery:.6f}"
             )
 
-            scheduler.step(val_total)
+            scheduler.step(val_recon)
 
             # Save best model for this phase
-            if val_total < best_val_loss:
-                best_val_loss = val_total
+            if val_recon < best_val_loss:
+                best_val_loss = val_recon
                 best_path = os.path.join("weights_tabular_input_ae", f"best_tabular_input_ae_{phase_name}.pth")
                 torch.save(model.state_dict(), best_path)
                 print(f"New best model saved to {best_path}")
 
         else:
-            scheduler.step(train_total)
+            scheduler.step(train_recon)
 
     return model
 
@@ -140,7 +165,7 @@ def train_tabular_input_autoencoder(
 def main():
     data_root = "/vol/miltank/projects/practical_wise2526/knee-osteoarthritis-severity/data/cleaned_images_baseline"
     clinical_csv_path = "./csv/clinical00_cleaned.csv"
-    tabular_variables = ["V00KOOSKPL"]  # Only the KOOS Pain Score for example.
+    tabular_variables = ["V00WOMTSL", "V00XRJSM_L", "V99ELKVSAF"]  # WOMAC score, JSN, and surgery variables for the LEFT side for now.
     side = "left"
     
 
@@ -199,7 +224,6 @@ def main():
         shuffle=True, 
         num_workers=num_workers if is_cuda else 0, 
         pin_memory=is_cuda,
-        prefetch_factor=2 if num_workers > 0 else None
     )
     
     val_loader = DataLoader(
@@ -221,7 +245,6 @@ def main():
         in_channels=1,
         latent_channels=64,
         num_tabular_inputs=len(tabular_variables),
-        num_tabular_outputs=1,
     )
 
     num_epochs = 50  # NOTE: Can play with this.
