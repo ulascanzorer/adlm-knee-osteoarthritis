@@ -1,43 +1,114 @@
+
 {
-    "VARIABLES": {
-      "ALL_R": {
-        "SYMPTOMS": [
-          "V00WOMTSR",
-          "V00KOOSKPR",
-          "V00KOOSYMR",
-          "V00KOOSQOL"
-        ],
-        "STRUCTURE": [
-          "V00XRJSL_R",
-          "V00XRJSM_R"
-          
-        ],
-        "SURGERY": [
-          "V99ERKVSAF"
-        ],
-        "KL_GRADE": [
-          "V00XRKL_R"
-        ]
-      },
-  
-      "ALL_L": {
-        "SYMPTOMS": [
-          "V00WOMTSL",
-          "V00KOOSKPL",
-          "V00KOOSYML",
-          "V00KOOSQOL"
-        ],
-        "STRUCTURE": [
-          "V00XRJSL_L",
-          "V00XRJSM_L"
-        ],
-        "SURGERY": [
-          "V99ELKVSAF"
-        ],
-        "KL_GRADE": [
-           "V00XRKL_L"
-        ]
-      }
+  "VARIABLES": {
+    "ALL_R": {
+      "SYMPTOMS": [
+        "V00WOMTSR",
+        "V00KOOSKPR",
+        "V00KOOSYMR",
+        "V00KOOSQOL"
+      ],
+      "STRUCTURE": [
+        "V00XRJSM_R",
+        "V00XRJSL_R",
+
+        "V00XRSCFM_R",
+        "V00XRSCFL_R",
+        "V00XRSCTM_R",
+        "V00XRSCTL_R",
+
+        "V00XROSFM_R",
+        "V00XROSFL_R",
+        "V00XROSTM_R",
+        "V00XROSTL_R"
+      ],
+      "SURGERY": [
+        "V99ERKVSAF"
+      ],
+      "KL_GRADE": [
+        "V00XRKL_R"
+      ]
+    },
+
+    "ALL_L": {
+      "SYMPTOMS": [
+        "V00WOMTSL",
+        "V00KOOSKPL",
+        "V00KOOSYML",
+        "V00KOOSQOL"
+      ],
+      "STRUCTURE": [
+        "V00XRJSM_L",
+        "V00XRJSL_L",
+
+        "V00XRSCFM_L",
+        "V00XRSCFL_L",
+        "V00XRSCTM_L",
+        "V00XRSCTL_L",
+
+        "V00XROSFM_L",
+        "V00XROSFL_L",
+        "V00XROSTM_L",
+        "V00XROSTL_L"
+      ],
+      "SURGERY": [
+        "V99ELKVSAF"
+      ],
+      "KL_GRADE": [
+        "V00XRKL_L"
+      ]
     }
+
+  },
+
+  "VARIABLE_DESCRIPTIONS": {
+      "V00WOMTSR": "Right knee WOMAC total score (pain, stiffness, function; calculated).",
+      "V00WOMTSL": "Left knee WOMAC total score (pain, stiffness, function; calculated).",
+
+      "V00KOOSKPR": "Right knee KOOS Pain Score (0–100, higher = better; calculated).",
+      "V00KOOSKPL": "Left knee KOOS Pain Score (0–100, higher = better; calculated).",
+
+      "V00KOOSYMR": "Right knee KOOS Symptoms Score (0–100, higher = better; calculated).",
+      "V00KOOSYML": "Left knee KOOS Symptoms Score (0–100, higher = better; calculated).",
+
+      "V00KOOSQOL": "KOOS knee-related Quality of Life score (0–100; calculated).",
+
+      "V00XRJSM_R": "Right knee medial tibiofemoral joint space narrowing (OARSI grade 0–3).",
+      "V00XRJSM_L": "Left knee medial tibiofemoral joint space narrowing (OARSI grade 0–3).",
+
+      "V00XRJSL_R": "Right knee lateral tibiofemoral joint space narrowing (OARSI grade 0–3).",
+      "V00XRJSL_L": "Left knee lateral tibiofemoral joint space narrowing (OARSI grade 0–3).",
+
+      "V00XRSCFM_R": "Right knee femur medial subchondral sclerosis (OARSI grade 0–3).",
+      "V00XRSCFM_L": "Left knee femur medial subchondral sclerosis (OARSI grade 0–3).",
+
+      "V00XRSCFL_R": "Right knee femur lateral subchondral sclerosis (OARSI grade 0–3).",
+      "V00XRSCFL_L": "Left knee femur lateral subchondral sclerosis (OARSI grade 0–3).",
+
+      "V00XRSCTM_R": "Right knee tibia medial subchondral sclerosis (OARSI grade 0–3).",
+      "V00XRSCTM_L": "Left knee tibia medial subchondral sclerosis (OARSI grade 0–3).",
+
+      "V00XRSCTL_R": "Right knee tibia lateral subchondral sclerosis (OARSI grade 0–3).",
+      "V00XRSCTL_L": "Left knee tibia lateral subchondral sclerosis (OARSI grade 0–3).",
+
+      "V00XROSFM_R": "Right knee femur medial osteophytes (OARSI grade 0–3).",
+      "V00XROSFM_L": "Left knee femur medial osteophytes (OARSI grade 0–3).",
+
+      "V00XROSFL_R": "Right knee femur lateral osteophytes (OARSI grade 0–3).",
+      "V00XROSFL_L": "Left knee femur lateral osteophytes (OARSI grade 0–3).",
+
+      "V00XROSTM_R": "Right knee tibia medial osteophytes (OARSI grade 0–3).",
+      "V00XROSTM_L": "Left knee tibia medial osteophytes (OARSI grade 0–3).",
+
+      "V00XROSTL_R": "Right knee tibia lateral osteophytes (OARSI grade 0–3).",
+      "V00XROSTL_L": "Left knee tibia lateral osteophytes (OARSI grade 0–3).",
+
+      "V00XRKL_R": "Right knee Kellgren–Lawrence radiographic OA grade (0–4).",
+      "V00XRKL_L": "Left knee Kellgren–Lawrence radiographic OA grade (0–4).",
+
+      "V99ERKVSAF": "Right knee: closest OAI visit after confirmed knee replacement.",
+      "V99ELKVSAF": "Left knee: closest OAI visit after confirmed knee replacement."
+    }
+
   }
   
