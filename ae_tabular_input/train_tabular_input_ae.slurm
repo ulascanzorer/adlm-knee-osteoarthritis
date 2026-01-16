@@ -4,7 +4,7 @@
 #SBATCH --output=train_tabular_input_ae_%j.out
 #SBATCH --error=train_tabular_input_ae_%j.err
 #SBATCH --qos=master-queuesave
-#SBATCH --time=0-14:00:00
+#SBATCH --time=1-14:00:00
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G             

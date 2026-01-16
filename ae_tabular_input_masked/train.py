@@ -54,9 +54,38 @@ def masked_ce(logits, target, mask):
     return loss.sum() / (mask.sum() + 1e-8)
 
 
-# -------------------------
-# Training loop
-# -------------------------
+def apply_tabular_dropout(
+    tab_x: torch.Tensor,
+    tab_mask: torch.Tensor,
+    p: float,
+    full_modality_p: float = 0.0,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Simulate missing tabular inputs during training.
+
+    - With probability `full_modality_p`, drop ALL tabular inputs for the sample.
+    - Otherwise, independently drop each present feature with probability `p`.
+
+    Assumes missing features already have tab_mask=0 and tab_x=0.
+    """
+    if p <= 0.0 and full_modality_p <= 0.0:
+        return tab_x, tab_mask
+
+    # Full modality dropout per sample (B, 1)
+    if full_modality_p > 0.0:
+        drop_all = (torch.rand(tab_mask.size(0), 1, device=tab_mask.device) < full_modality_p).float()
+        tab_mask = tab_mask * (1.0 - drop_all)
+        tab_x = tab_x * tab_mask
+
+    # Feature dropout (only affects currently-available features)
+    if p > 0.0:
+        drop_feat = (torch.rand_like(tab_mask) < p).float()
+        drop_feat = drop_feat * tab_mask  # only drop features that are present
+        tab_mask = tab_mask * (1.0 - drop_feat)
+        tab_x = tab_x * tab_mask
+
+    return tab_x, tab_mask
+
 
 def train_tabular_input_autoencoder(
     model,
@@ -68,6 +97,8 @@ def train_tabular_input_autoencoder(
     device="cuda",
     use_amp=True,
     phase_name="train",
+    tabular_dropout_p: float = 0.2,
+    tabular_dropout_full_p: float = 0.0,
 ):
     optimizer = optim.Adam(model.parameters(), lr=lr)
     scaler = GradScaler(enabled=use_amp)
@@ -79,7 +110,6 @@ def train_tabular_input_autoencoder(
     best_val_loss = float("inf")
 
     for epoch in range(1, num_epochs + 1):
-        # ----------------- TRAIN -----------------
         model.train()
         recon_sum = womac_sum = jsn_sum = surg_sum = 0.0
 
@@ -92,16 +122,20 @@ def train_tabular_input_autoencoder(
             y = y.to(device)
             y_mask = y_mask.to(device)
 
+            # simulate missing tabular inputs (TRAIN ONLY)
+            tab_x_do, tab_mask_do = apply_tabular_dropout(
+                tab_x, tab_mask, p=tabular_dropout_p, full_modality_p=tabular_dropout_full_p
+            )
+
             optimizer.zero_grad()
 
             with autocast(enabled=use_amp):
                 x_hat, womac_pred, jsn_pred, surg_pred, _ = model(
-                    x, tab_x, tab_mask
+                    x, tab_x_do, tab_mask_do
                 )
 
-                # Targets
                 target_womac = y[:, 0:1]
-                target_jsn = (y[:, 1] * 3).round().long()
+                target_jsn = (y[:, 1] * 3).round().clamp(0, 3).long()
                 target_surg = y[:, 2:3]
 
                 mask_womac = y_mask[:, 0:1]
@@ -109,14 +143,11 @@ def train_tabular_input_autoencoder(
                 mask_surg = y_mask[:, 2:3]
 
                 loss_recon = nn.functional.mse_loss(x_hat, x)
-
                 loss_womac = masked_mse(womac_pred, target_womac, mask_womac)
                 loss_jsn = masked_ce(jsn_pred, target_jsn, mask_jsn)
                 loss_surg = masked_bce(surg_pred, target_surg, mask_surg)
 
-                loss = loss_recon + lambda_tabular * (
-                    loss_womac + loss_jsn + loss_surg
-                )
+                loss = loss_recon + lambda_tabular * (loss_womac + loss_jsn + loss_surg)
 
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -155,7 +186,7 @@ def train_tabular_input_autoencoder(
                         )
 
                         target_womac = y[:, 0:1]
-                        target_jsn = (y[:, 1] * 3).round().long()
+                        target_jsn = (y[:, 1] * 3).round().clamp(0, 3).long()
                         target_surg = y[:, 2:3]
 
                         mask_womac = y_mask[:, 0:1]
@@ -195,10 +226,6 @@ def train_tabular_input_autoencoder(
     return model
 
 
-# -------------------------
-# Main
-# -------------------------
-
 def main():
     data_root = "/vol/miltank/projects/practical_wise2526/knee-osteoarthritis-severity/data/cleaned_images_baseline"
     clinical_csv_path = "./csv/clinical00_cleaned.csv"
@@ -208,6 +235,10 @@ def main():
     num_workers = 8
     num_epochs = 50
     lambda_tabular = 0.5
+
+    # simulate missing tabular inputs
+    tabular_dropout_p = 0.2          # per-feature drop prob
+    tabular_dropout_full_p = 0.0   
 
     device = get_device()
     is_cuda = device == "cuda"
@@ -259,6 +290,8 @@ def main():
         device=device,
         use_amp=is_cuda,
         phase_name="training_phase",
+        tabular_dropout_p=tabular_dropout_p,
+        tabular_dropout_full_p=tabular_dropout_full_p,
     )
 
     os.makedirs("weights_tabular_input_ae", exist_ok=True)
