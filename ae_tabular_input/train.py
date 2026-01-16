@@ -153,9 +153,9 @@ def train_tabular_input_autoencoder(
             if val_recon < best_val_loss:
                 best_val_loss = val_recon
                 best_path = os.path.join("weights_tabular_input_ae", f"best_tabular_input_ae_{phase_name}.pth")
+                os.makedirs("weights_tabular_input_ae", exist_ok=True)
                 torch.save(model.state_dict(), best_path)
                 print(f"New best model saved to {best_path}")
-
         else:
             scheduler.step(train_recon)
 

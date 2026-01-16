@@ -27,7 +27,6 @@ echo "GPU status:"
 nvidia-smi
 echo
 
-#cd /vol/miltank/users/$USER/Documents/adlm-knee-osteoarthritis
 
 echo "STARTING TABULAR-INPUT AE TRAINING"
 echo "Running ae_tabular_input/train.py..."
