@@ -28,9 +28,9 @@ nvidia-smi
 echo
 
 
-echo "STARTING TABULAR-INPUT AE TRAINING"
-echo "Running ae_tabular_input/train.py..."
+echo "STARTING TABULAR-INPUT MASKED AE TRAINING"
+echo "Running ae_tabular_input_masked/train.py..."
 
-python ae_tabular_input/train.py
+python ae_tabular_input_masked/train.py
 
 echo "Training DONE"

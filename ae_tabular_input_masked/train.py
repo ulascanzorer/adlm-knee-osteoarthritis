@@ -13,9 +13,8 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
-from ae_tabular_input.dataset import KneeMRITabularDataset
-from ae_tabular_input.model import build_tabular_input_ae
-from ae_filippo.data_t import KneeMRIDataset as PlainMRIDataset
+from ae_tabular_input_masked.dataset import KneeMRITabularDataset
+from ae_tabular_input_masked.model import build_tabular_input_ae
 
 
 def get_device():
@@ -26,20 +25,13 @@ def get_device():
     return "cpu"
 
 
-# -------------------------
-# Masked loss helpers
-# -------------------------
-
 def masked_mse(pred, target, mask):
-    # pred, target: (B, 1)
-    # mask: (B, 1)
     diff = (pred - target) ** 2
     diff = diff * mask
     return diff.sum() / (mask.sum() + 1e-8)
 
 
 def masked_bce(logits, target, mask):
-    # logits, target, mask: (B, 1)
     loss = nn.functional.binary_cross_entropy_with_logits(
         logits, target, reduction="none"
     )
@@ -48,7 +40,6 @@ def masked_bce(logits, target, mask):
 
 
 def masked_ce(logits, target, mask):
-    # logits: (B, C), target: (B,), mask: (B,)
     loss = nn.functional.cross_entropy(logits, target, reduction="none")
     loss = loss * mask
     return loss.sum() / (mask.sum() + 1e-8)
@@ -58,32 +49,16 @@ def apply_tabular_dropout(
     tab_x: torch.Tensor,
     tab_mask: torch.Tensor,
     p: float,
-    full_modality_p: float = 0.0,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """
-    Simulate missing tabular inputs during training.
-
-    - With probability `full_modality_p`, drop ALL tabular inputs for the sample.
-    - Otherwise, independently drop each present feature with probability `p`.
-
-    Assumes missing features already have tab_mask=0 and tab_x=0.
-    """
-    if p <= 0.0 and full_modality_p <= 0.0:
+    
+    if p <= 0.0:
         return tab_x, tab_mask
 
-    # Full modality dropout per sample (B, 1)
-    if full_modality_p > 0.0:
-        drop_all = (torch.rand(tab_mask.size(0), 1, device=tab_mask.device) < full_modality_p).float()
-        tab_mask = tab_mask * (1.0 - drop_all)
-        tab_x = tab_x * tab_mask
+    drop = (torch.rand_like(tab_mask) < p).float()
+    drop = drop * tab_mask  
 
-    # Feature dropout (only affects currently-available features)
-    if p > 0.0:
-        drop_feat = (torch.rand_like(tab_mask) < p).float()
-        drop_feat = drop_feat * tab_mask  # only drop features that are present
-        tab_mask = tab_mask * (1.0 - drop_feat)
-        tab_x = tab_x * tab_mask
-
+    tab_mask = tab_mask * (1.0 - drop)
+    tab_x = tab_x * tab_mask
     return tab_x, tab_mask
 
 
@@ -98,7 +73,7 @@ def train_tabular_input_autoencoder(
     use_amp=True,
     phase_name="train",
     tabular_dropout_p: float = 0.2,
-    tabular_dropout_full_p: float = 0.0,
+    weights_dir: str = "weights_ae_masked",
 ):
     optimizer = optim.Adam(model.parameters(), lr=lr)
     scaler = GradScaler(enabled=use_amp)
@@ -107,6 +82,7 @@ def train_tabular_input_autoencoder(
         optimizer, mode="min", factor=0.5, patience=3
     )
 
+    os.makedirs(weights_dir, exist_ok=True)
     best_val_loss = float("inf")
 
     for epoch in range(1, num_epochs + 1):
@@ -122,17 +98,12 @@ def train_tabular_input_autoencoder(
             y = y.to(device)
             y_mask = y_mask.to(device)
 
-            # simulate missing tabular inputs (TRAIN ONLY)
-            tab_x_do, tab_mask_do = apply_tabular_dropout(
-                tab_x, tab_mask, p=tabular_dropout_p, full_modality_p=tabular_dropout_full_p
-            )
+            tab_x_do, tab_mask_do = apply_tabular_dropout(tab_x, tab_mask, p=tabular_dropout_p)
 
             optimizer.zero_grad()
 
             with autocast(enabled=use_amp):
-                x_hat, womac_pred, jsn_pred, surg_pred, _ = model(
-                    x, tab_x_do, tab_mask_do
-                )
+                x_hat, womac_pred, jsn_pred, surg_pred, _ = model(x, tab_x_do, tab_mask_do)
 
                 target_womac = y[:, 0:1]
                 target_jsn = (y[:, 1] * 3).round().clamp(0, 3).long()
@@ -167,7 +138,6 @@ def train_tabular_input_autoencoder(
             f"surgery={surg_sum/n:.6f}"
         )
 
-        # ----------------- VALIDATION -----------------
         if val_loader is not None:
             model.eval()
             recon_sum = womac_sum = jsn_sum = surg_sum = 0.0
@@ -181,9 +151,7 @@ def train_tabular_input_autoencoder(
                     y_mask = y_mask.to(device)
 
                     with autocast(enabled=use_amp):
-                        x_hat, womac_pred, jsn_pred, surg_pred, _ = model(
-                            x, tab_x, tab_mask
-                        )
+                        x_hat, womac_pred, jsn_pred, surg_pred, _ = model(x, tab_x, tab_mask)
 
                         target_womac = y[:, 0:1]
                         target_jsn = (y[:, 1] * 3).round().clamp(0, 3).long()
@@ -218,10 +186,9 @@ def train_tabular_input_autoencoder(
 
             if val_recon < best_val_loss:
                 best_val_loss = val_recon
-                os.makedirs("weights_tabular_input_ae", exist_ok=True)
-                path = f"weights_tabular_input_ae/best_tabular_input_ae_{phase_name}.pth"
-                torch.save(model.state_dict(), path)
-                print(f"New best model saved to {path}")
+                best_path = os.path.join(weights_dir, f"best_ae_masked_{phase_name}.pth")
+                torch.save(model.state_dict(), best_path)
+                print(f"New best model saved to {best_path}")
 
     return model
 
@@ -236,9 +203,9 @@ def main():
     num_epochs = 50
     lambda_tabular = 0.5
 
-    # simulate missing tabular inputs
-    tabular_dropout_p = 0.2          # per-feature drop prob
-    tabular_dropout_full_p = 0.0   
+    tabular_dropout_p = 0.2
+
+    weights_dir = "weights_ae_masked"
 
     device = get_device()
     is_cuda = device == "cuda"
@@ -291,14 +258,13 @@ def main():
         use_amp=is_cuda,
         phase_name="training_phase",
         tabular_dropout_p=tabular_dropout_p,
-        tabular_dropout_full_p=tabular_dropout_full_p,
+        weights_dir=weights_dir,
     )
 
-    os.makedirs("weights_tabular_input_ae", exist_ok=True)
-    torch.save(
-        model.state_dict(),
-        f"weights_tabular_input_ae/final_tabular_input_ae_{num_epochs}_epochs.pth",
-    )
+    os.makedirs(weights_dir, exist_ok=True)
+    final_path = os.path.join(weights_dir, f"final_ae_masked_{num_epochs}_epochs.pth")
+    torch.save(model.state_dict(), final_path)
+    print(f"Saved final model to {final_path}")
 
 
 if __name__ == "__main__":
