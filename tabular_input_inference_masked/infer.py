@@ -10,14 +10,18 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
-from tabular_input_inference.data import iter_mri_dataset_with_tabular_inputs, TAB_INPUTS_L, TAB_INPUTS_R
+from tabular_input_inference_masked.data import (
+    iter_mri_dataset_with_tabular_inputs,
+    TAB_INPUTS_L,
+    TAB_INPUTS_R,
+)
 
 
 def build_feature_extractor(weights_path: str, device: torch.device, side: str) -> nn.Module:
     """
-    Loads the AE that takes (MRI, tab_x[T]) and returns z features.
+    Loads the AE that takes (MRI, tab_x[T], tab_mask[T]) and returns latent features.
     """
-    from ae_tabular_input.model import build_tabular_input_ae
+    from ae_tabular_input_masked.model import build_tabular_input_ae
 
     num_tabular_inputs = len(TAB_INPUTS_L) if side == "left" else len(TAB_INPUTS_R)
 
@@ -36,22 +40,30 @@ def build_feature_extractor(weights_path: str, device: torch.device, side: str) 
     return model
 
 
-def extract_features(model: nn.Module, vol: torch.Tensor, tab_x: torch.Tensor) -> torch.Tensor:
+def extract_features(
+    model: nn.Module,
+    vol: torch.Tensor,
+    tab_x: torch.Tensor,
+    tab_mask: torch.Tensor,
+) -> torch.Tensor:
     """
-    vol:   [B, 1, D, H, W]
-    tab_x: [B, T]
+    vol:      [B, 1, D, H, W]
+    tab_x:    [B, T]
+    tab_mask: [B, T]
     Returns:
         feats: [B, 64]
     """
-    encoded_mri = model.encoder(vol)            # [B, C, D', H', W']
-    encoded_tab = model.tabular_encoder(tab_x)  # [B, tab_lat]
+    encoded_mri = model.encoder(vol)  # [B, C, D', H', W']
+
+    # masked model's tabular encoder expects (tab_x, tab_mask)
+    encoded_tab = model.tabular_encoder(tab_x, tab_mask)  # [B, tab_lat]
 
     B, C, D, H, W = encoded_mri.shape
     encoded_tab = encoded_tab.view(B, -1, 1, 1, 1).expand(-1, -1, D, H, W)
 
     z = torch.cat([encoded_mri, encoded_tab], dim=1)
-    z = model.channel_projection(z)             # [B, 64, D', H', W']
-    feats = z.mean(dim=(2, 3, 4))               # [B, 64]
+    z = model.channel_projection(z)  # [B, 64, D', H', W']
+    feats = z.mean(dim=(2, 3, 4))    # [B, 64]
     return feats
 
 
@@ -63,10 +75,6 @@ def run_inference(
     max_patients: int | None = None,
     features_dir: str = "features",
 ) -> str:
-    """
-    Streams patients and saves:
-        features_{side}.npz with arrays: ids, features
-    """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = build_feature_extractor(weights_path=weights_path, device=device, side=side)
 
@@ -76,16 +84,17 @@ def run_inference(
     processed = 0
 
     with torch.no_grad():
-        for pid, vol, tab_x in iter_mri_dataset_with_tabular_inputs(
+        for pid, vol, tab_x, tab_mask in iter_mri_dataset_with_tabular_inputs(
             dataset_root=data_root,
             clinical_csv_path=clinical_csv_path,
             side=side,
             max_patients=max_patients,
         ):
-            vol = vol.unsqueeze(0).to(device)     # [1, 1, D, 224, 224]
-            tab_x = tab_x.unsqueeze(0).to(device) # [1, T]
+            vol = vol.unsqueeze(0).to(device)          # [1, 1, D, 224, 224]
+            tab_x = tab_x.unsqueeze(0).to(device)      # [1, T]
+            tab_mask = tab_mask.unsqueeze(0).to(device)# [1, T]
 
-            feats = extract_features(model=model, vol=vol, tab_x=tab_x)  # [1, 64]
+            feats = extract_features(model=model, vol=vol, tab_x=tab_x, tab_mask=tab_mask)
             patients_features[pid] = feats.cpu()
 
             processed += 1

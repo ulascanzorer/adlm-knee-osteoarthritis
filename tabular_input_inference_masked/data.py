@@ -37,7 +37,6 @@ TAB_INPUTS_R = [
     "V99ERKVSAF",
 ]
 
-
 _transform_2d = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -79,9 +78,6 @@ def list_patient_ids_fast(dataset_root: str, side: str = "left", max_patients: O
 
 
 def reconstruct_mri_from_tar(tar_path: str) -> Optional[torch.Tensor]:
-    """
-    Extracts TAR, reads dicoms, stacks, normalizes, resizes to 224x224, returns [1, D, 224, 224] in [-1,1].
-    """
     temp_dir = tempfile.mkdtemp()
     try:
         with tarfile.open(tar_path, "r:gz") as tar:
@@ -126,15 +122,13 @@ def reconstruct_mri_from_tar(tar_path: str) -> Optional[torch.Tensor]:
         resized_slices = []
         for i in range(volume.shape[0]):
             img = Image.fromarray((volume[i] * 255).astype(np.uint8))
-            img = _transform_2d.transforms[0](img)  # Resize only
+            img = _transform_2d.transforms[0](img)  # resize only
             resized_slices.append(np.array(img))
 
         volume = np.stack(resized_slices, axis=0).astype(np.float32) / 255.0
-
         vol = torch.tensor(volume, dtype=torch.float32).unsqueeze(0)  # [1, D, 224, 224]
         vol = (vol - 0.5) / 0.5
         return vol
-
     except Exception:
         return None
     finally:
@@ -162,16 +156,18 @@ def load_single_patient_mri(dataset_root: str, patient_id: str, side: str = "lef
     return None
 
 
-def _build_tab_vector(row: Dict[str, Any], cols: List[str]) -> torch.Tensor:
+def _build_tab_vector_and_mask(row: Dict[str, Any], cols: List[str]) -> Tuple[torch.Tensor, torch.Tensor]:
     vals: List[float] = []
+    mask: List[float] = []
     for c in cols:
         v = row.get(c, None)
         if is_missing(v):
-            # keep same missing handling as training dataset: fill with 0.0
             vals.append(0.0)
+            mask.append(0.0)
         else:
             vals.append(normalize_tab(c, float(v)))
-    return torch.tensor(vals, dtype=torch.float32)
+            mask.append(1.0)
+    return torch.tensor(vals, dtype=torch.float32), torch.tensor(mask, dtype=torch.float32)
 
 
 def iter_mri_dataset_with_tabular_inputs(
@@ -179,12 +175,12 @@ def iter_mri_dataset_with_tabular_inputs(
     clinical_csv_path: str,
     side: str = "left",
     max_patients: Optional[int] = None,
-) -> Generator[Tuple[str, torch.Tensor, torch.Tensor], None, None]:
+) -> Generator[Tuple[str, torch.Tensor, torch.Tensor, torch.Tensor], None, None]:
     """
-    Yields (patient_id, vol[1,D,224,224], tab_x[T]) streamed.
+    Yields (patient_id, vol[1,D,224,224], tab_x[T], tab_mask[T]) streamed.
     """
-    # patient ids that have MRI
     all_ids = list_patient_ids_fast(dataset_root, side=side, max_patients=max_patients)
+
     if side == "left":
         all_ids = [pid for pid in all_ids if pid not in EXCLUDE_L]
         cols = TAB_INPUTS_L
@@ -216,8 +212,13 @@ def iter_mri_dataset_with_tabular_inputs(
         if vol is None:
             continue
 
-        tab_x = _build_tab_vector(clinical[pid], cols)  # [T]
+        tab_x, tab_mask = _build_tab_vector_and_mask(clinical[pid], cols)
+
         processed += 1
         if processed == 1:
-            print(f"[{side}] Example MRI tensor shape: {tuple(vol.shape)}; tab_x shape: {tuple(tab_x.shape)}")
-        yield pid, vol, tab_x
+            print(
+                f"[{side}] Example MRI tensor shape: {tuple(vol.shape)}; "
+                f"tab_x shape: {tuple(tab_x.shape)}; tab_mask shape: {tuple(tab_mask.shape)}"
+            )
+
+        yield pid, vol, tab_x, tab_mask

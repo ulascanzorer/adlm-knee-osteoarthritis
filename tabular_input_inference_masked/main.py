@@ -10,7 +10,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
-from tabular_input_inference.infer import run_inference
+from tabular_input_inference_masked.infer import run_inference
 from inference.cluster import run_kmeans, clusters_stats
 from inference.tsne_visualization import tsne_plot_with_clusters
 
@@ -85,39 +85,25 @@ def run_tsne(features_dir: str, csv_dir: str, plots_dir: str, side: str, n_compo
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Full MRI + tabular input pipeline: inference, clustering, stats, t-SNE (non-masked model)"
+        description="Full MRI + tabular input pipeline: inference, clustering, stats, t-SNE (masked AE)"
     )
     parser.add_argument(
         "--data_root",
         type=str,
         default="/vol/miltank/projects/practical_wise2526/knee-osteoarthritis-severity/data/cleaned_images_baseline",
     )
-    parser.add_argument(
-        "--weights_path",
-        type=str,
-        default=None,
-        help="Path to model weights.",
-    )
-    parser.add_argument(
-        "--side",
-        type=str,
-        choices=["left", "right", "both"],
-        default="left",
-    )
+    parser.add_argument("--weights_path", type=str, default=None)
+    parser.add_argument("--side", type=str, choices=["left", "right", "both"], default="left")
     parser.add_argument("--max_patients", type=int, default=None)
-    parser.add_argument(
-        "--clinical_csv",
-        type=str,
-        default="csv/clinical00_cleaned.csv",
-    )
+    parser.add_argument("--clinical_csv", type=str, default="csv/clinical00_cleaned.csv")
     parser.add_argument("--k", type=int, default=5)
     parser.add_argument("--tsne_components", type=int, choices=[1, 2, 3], default=1)
     args = parser.parse_args()
 
-    weights_path = args.weights_path or "./weights_tabular_input_ae/best_tabular_input_ae_training_phase.pth"
+    weights_path = args.weights_path or "./weights_ae_masked/best_ae_masked_training_phase.pth"
     print(f"Weights: {weights_path}")
 
-    results_dir = os.path.join("results", "tabular_input_ae")
+    results_dir = os.path.join("results", "tabular_input_ae_masked")
     features_dir = os.path.join(results_dir, "features")
     csv_dir = os.path.join(results_dir, "csv")
     plots_dir = os.path.join(results_dir, "plots")
@@ -128,7 +114,6 @@ def main() -> None:
     for side in sides:
         print(f"\n=== SIDE: {side} ===")
 
-        # 1) Inference → save features_<side>.npz
         run_inference(
             data_root=args.data_root,
             clinical_csv_path=args.clinical_csv,
@@ -138,13 +123,8 @@ def main() -> None:
             features_dir=features_dir,
         )
 
-        # 2) Clustering
         run_clustering(features_dir=features_dir, csv_dir=csv_dir, side=side, k=args.k)
-
-        # 3) Stats
         run_stats(csv_dir=csv_dir, clinical_csv=args.clinical_csv, side=side)
-
-        # 4) t-SNE
         run_tsne(
             features_dir=features_dir,
             csv_dir=csv_dir,
