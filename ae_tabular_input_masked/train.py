@@ -50,12 +50,12 @@ def apply_tabular_dropout(
     tab_mask: torch.Tensor,
     p: float,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    
+
     if p <= 0.0:
         return tab_x, tab_mask
 
     drop = (torch.rand_like(tab_mask) < p).float()
-    drop = drop * tab_mask  
+    drop = drop * tab_mask
 
     tab_mask = tab_mask * (1.0 - drop)
     tab_x = tab_x * tab_mask
@@ -100,14 +100,14 @@ def train_tabular_input_autoencoder(
 
             tab_x_do, tab_mask_do = apply_tabular_dropout(tab_x, tab_mask, p=tabular_dropout_p)
 
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
 
             with autocast(enabled=use_amp):
                 x_hat, womac_pred, jsn_pred, surg_pred, _ = model(x, tab_x_do, tab_mask_do)
 
                 target_womac = y[:, 0:1]
                 target_jsn = (y[:, 1] * 3).round().clamp(0, 3).long()
-                target_surg = y[:, 2:3]
+                target_surg = torch.clamp(y[:, 2:3], 0.0, 1.0)
 
                 mask_womac = y_mask[:, 0:1]
                 mask_jsn = y_mask[:, 1]
@@ -155,7 +155,7 @@ def train_tabular_input_autoencoder(
 
                         target_womac = y[:, 0:1]
                         target_jsn = (y[:, 1] * 3).round().clamp(0, 3).long()
-                        target_surg = y[:, 2:3]
+                        target_surg = torch.clamp(y[:, 2:3], 0.0, 1.0)
 
                         mask_womac = y_mask[:, 0:1]
                         mask_jsn = y_mask[:, 1]
@@ -173,19 +173,24 @@ def train_tabular_input_autoencoder(
 
             n = len(val_loader)
             val_recon = recon_sum / n
+            val_womac = womac_sum / n
+            val_jsn = jsn_sum / n
+            val_surg = surg_sum / n
+
+            val_loss = val_recon + lambda_tabular * (val_womac + val_jsn + val_surg)
 
             print(
                 f"[{phase_name} Epoch {epoch}] "
                 f"Val:   recon={val_recon:.6f}, "
-                f"womac={womac_sum/n:.6f}, "
-                f"jsn={jsn_sum/n:.6f}, "
-                f"surgery={surg_sum/n:.6f}"
+                f"womac={val_womac:.6f}, "
+                f"jsn={val_jsn:.6f}, "
+                f"surgery={val_surg:.6f}"
             )
 
-            scheduler.step(val_recon)
+            scheduler.step(val_loss)
 
-            if val_recon < best_val_loss:
-                best_val_loss = val_recon
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
                 best_path = os.path.join(weights_dir, f"best_ae_masked_{phase_name}.pth")
                 torch.save(model.state_dict(), best_path)
                 print(f"New best model saved to {best_path}")
