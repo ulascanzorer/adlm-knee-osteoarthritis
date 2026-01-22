@@ -27,7 +27,12 @@
       ],
       "KL_GRADE": [
         "V00XRKL_R"
-      ]
+      ],
+      "BIO": [
+        "V00AGE",
+        "V00ABCIRC",
+        "P02SEX"
+       ]
     },
 
     "ALL_L": {
@@ -56,7 +61,12 @@
       ],
       "KL_GRADE": [
         "V00XRKL_L"
-      ]
+      ],
+      "BIO": [
+        "V00AGE",
+        "V00ABCIRC",
+        "P02SEX"
+       ]
     }
 
   },
@@ -107,7 +117,12 @@
       "V00XRKL_L": "Left knee Kellgren–Lawrence radiographic OA grade (0–4).",
 
       "V99ERKVSAF": "Right knee: closest OAI visit after confirmed knee replacement.",
-      "V99ELKVSAF": "Left knee: closest OAI visit after confirmed knee replacement."
+      "V99ELKVSAF": "Left knee: closest OAI visit after confirmed knee replacement.",
+
+      "V00AGE": "Age at OAI baseline visit (years).",
+      "V00ABCIRC": "Abdominal circumference at OAI baseline visit (cm).",
+      
+      "P02SEX" : "Patient gender "
     }
 
   }

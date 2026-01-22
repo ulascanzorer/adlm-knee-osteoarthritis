@@ -25,6 +25,11 @@
       "KL_GRADE": [
         "V00XRKL"
       ]
+      ,
+      "BIO": [
+        "V00AGE",
+        "V00ABCIRC",
+      "P02SEX"]
     },
 
     "ALL_L": {
@@ -52,6 +57,12 @@
       "KL_GRADE": [
          "V00XRKL"
       ]
+      ,
+      "BIO": [
+        "V00AGE",
+        "V00ABCIRC",
+        "P02SEX"
+       ]
     }
   }
 }
