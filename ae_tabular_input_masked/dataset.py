@@ -1,8 +1,7 @@
-# ae_tabular_input/dataset.py
 import os
 import sys
 import random
-from typing import Optional, List, Tuple, Dict, Any
+from typing import Optional, List, Tuple, Any
 
 import torch
 from torch.utils.data import Dataset
@@ -18,31 +17,24 @@ from ae_pain.data import list_patient_ids_fast, load_single_patient_mri
 EXCLUDE_L = {"9070923", "9388265", "9594253", "9860568"}
 EXCLUDE_R = {"9004315", "9537947", "9637394", "9462278", "9522128"}
 
-
-TAB_INPUTS_L = [
-    "V00WOMTSL", "V00KOOSKPL", "V00KOOSYML", "V00KOOSQOL",
-    "V00XRJSL_L", "V00XRJSM_L",
-    "V00XRSCFM_L", "V00XRSCFL_L",
-    "V00XRSCTM_L", "V00XRSCTL_L",
-    "V00XROSFM_L", "V00XROSFL_L",
-    "V00XROSTM_L", "V00XROSTL_L",
-    "V00XRKL_L",
-    "V99ELKVSAF",
-]
-
-TAB_INPUTS_R = [
-    "V00WOMTSR", "V00KOOSKPR", "V00KOOSYMR", "V00KOOSQOL",
-    "V00XRJSL_R", "V00XRJSM_R",
-    "V00XRSCFM_R", "V00XRSCFL_R",
-    "V00XRSCTM_R", "V00XRSCTL_R",
-    "V00XROSFM_R", "V00XROSFL_R",
-    "V00XROSTM_R", "V00XROSTL_R",
-    "V00XRKL_R",
-    "V99ERKVSAF",
-]
+TAB_INPUTS = ["V00AGE", "V00ABCIRC", "P02SEX"]
 
 TARGETS_L = ["V00WOMTSL", "V00XRJSM_L", "V99ELKVSAF"]
 TARGETS_R = ["V00WOMTSR", "V00XRJSM_R", "V99ERKVSAF"]
+
+
+def write_test_ids(test_ids: List[str], side: str, out_dir: str = "test_ids") -> str:
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, f"masked_ae_{side}.txt")
+    with open(path, "w", encoding="utf-8") as f:
+        for pid in test_ids:
+            f.write(f"{pid}\n")
+    return path
+
+
+def read_ids(path: str) -> List[str]:
+    with open(path, "r", encoding="utf-8") as f:
+        return [line.strip() for line in f if line.strip()]
 
 
 # -------------------------
@@ -50,11 +42,21 @@ TARGETS_R = ["V00WOMTSR", "V00XRJSM_R", "V99ERKVSAF"]
 # -------------------------
 
 def normalize_tab(col: str, raw: float) -> float:
-    if col.startswith(("V00WOMTS", "V00KOOS")):
+    if col == "V00AGE":
         return raw / 100.0
-    if col.startswith("V00XRKL"):
-        return raw / 4.0
-    if col.startswith("V00XR"):
+    if col == "V00ABCIRC":
+        return raw / 200.0
+    if col == "P02SEX":
+        # coded as 1/2 → 0/1
+        if raw == 1.0:
+            return 0.0
+        if raw == 2.0:
+            return 1.0
+        return 0.0 if raw <= 1.0 else 1.0
+
+    if col.startswith("V00WOMTS"):
+        return raw / 100.0
+    if col.startswith("V00XRJSM"):
         return raw / 3.0
     if col.startswith("V99"):
         return raw
@@ -70,36 +72,39 @@ def is_missing(v: Any) -> bool:
 
 
 class KneeMRITabularDataset(Dataset):
+    """
+    Returns:
+        vol      : (1, D, H, W)
+        tab_x    : (T,)
+        tab_mask : (T,)
+        y        : (3,)
+        y_mask   : (3,)
+    """
+
     def __init__(
         self,
         root: str,
         clinical_csv_path: str,
+        patient_ids: Optional[List[str]] = None,
         side: str = "left",
-        split: str = "train",
         max_patients: Optional[int] = None,
-        train_frac: float = 0.7,
-        val_frac: float = 0.15,
-        seed: int = 42,
         require_all_targets: bool = False,
+        require_all_inputs: bool = False,
     ):
         super().__init__()
 
         self.root = root
         self.side = side
+        self.tab_inputs = TAB_INPUTS
 
         if side == "left":
-            self.tab_inputs = TAB_INPUTS_L
             self.targets = TARGETS_L
             exclude = EXCLUDE_L
         elif side == "right":
-            self.tab_inputs = TAB_INPUTS_R
             self.targets = TARGETS_R
             exclude = EXCLUDE_R
         else:
             raise ValueError("side must be 'left' or 'right'")
-
-        all_ids = list_patient_ids_fast(root, side, max_patients)
-        all_ids = [str(pid) for pid in all_ids if str(pid) not in exclude]
 
         df = pd.read_csv(clinical_csv_path)
         df.columns = df.columns.str.strip()
@@ -110,37 +115,35 @@ class KneeMRITabularDataset(Dataset):
         if missing_cols:
             raise ValueError(f"Missing columns in CSV: {missing_cols}")
 
+        self.clinical = df.set_index("ID").to_dict("index")
         valid_ids = set(df["ID"].tolist())
-        all_ids = [pid for pid in all_ids if pid in valid_ids]
+
+        if patient_ids is None:
+            all_ids = list_patient_ids_fast(root, side, max_patients)
+            patient_ids = [str(pid) for pid in all_ids]
+        else:
+            patient_ids = [str(pid) for pid in patient_ids]
+            if max_patients is not None:
+                patient_ids = patient_ids[:max_patients]
+
+        patient_ids = [pid for pid in patient_ids if pid not in exclude]
+        patient_ids = [pid for pid in patient_ids if pid in valid_ids]
+
+        sub = df.set_index("ID")
 
         if require_all_targets:
-            sub = df.set_index("ID")
-            keep = []
-            for pid in all_ids:
-                row = sub.loc[pid]
-                if isinstance(row, pd.DataFrame):
-                    row = row.iloc[0]
-                if all(not is_missing(row[t]) for t in self.targets):
-                    keep.append(pid)
-            all_ids = keep
+            patient_ids = [
+                pid for pid in patient_ids
+                if all(not is_missing(sub.loc[pid][t]) for t in self.targets)
+            ]
 
-        rng = random.Random(seed)
-        rng.shuffle(all_ids)
+        if require_all_inputs:
+            patient_ids = [
+                pid for pid in patient_ids
+                if all(not is_missing(sub.loc[pid][c]) for c in self.tab_inputs)
+            ]
 
-        n_total = len(all_ids)
-        n_train = int(train_frac * n_total)
-        n_val = int(val_frac * n_total)
-
-        if split == "train":
-            self.patient_ids = all_ids[:n_train]
-        elif split == "val":
-            self.patient_ids = all_ids[n_train:n_train + n_val]
-        elif split == "test":
-            self.patient_ids = all_ids[n_train + n_val:]
-        else:
-            raise ValueError("split must be 'train', 'val', or 'test'")
-
-        self.clinical = df.set_index("ID").to_dict("index")
+        self.patient_ids = patient_ids
 
     def __len__(self) -> int:
         return len(self.patient_ids)
@@ -156,13 +159,15 @@ class KneeMRITabularDataset(Dataset):
 
         vol = vol.float()
         vmin, vmax = vol.min(), vol.max()
+
         if vmax > 5.0:
             vol = vol - vmin
             if vol.max() > 0:
                 vol = vol / vol.max()
             vol = vol * 2.0 - 1.0
-        elif vmin >= 0.0 and vmax <= 1.0:
+        elif 0.0 <= vmin and vmax <= 1.0:
             vol = vol * 2.0 - 1.0
+
         return vol
 
     def _build_tab(self, pid: str, cols: List[str]) -> Tuple[torch.Tensor, torch.Tensor]:

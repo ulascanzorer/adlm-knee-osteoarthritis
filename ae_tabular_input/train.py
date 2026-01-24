@@ -1,5 +1,7 @@
 import os
 import sys
+import random
+from typing import List, Tuple
 
 import torch
 import torch.nn as nn
@@ -8,16 +10,15 @@ from torch.cuda.amp import autocast, GradScaler
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
-from ae_tabular_input.dataset import KneeMRITabularDataset
+from ae_tabular_input.dataset import KneeMRITabularDataset, write_test_ids
 from ae_tabular_input.model import build_tabular_input_ae
 
 
-def get_device():
+def get_device() -> str:
     if torch.cuda.is_available():
         return "cuda"
     if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
@@ -25,18 +26,44 @@ def get_device():
     return "cpu"
 
 
+def split_ids_disjoint(
+    all_ids: List[str],
+    train_frac: float,
+    val_frac: float,
+    seed: int,
+) -> Tuple[List[str], List[str], List[str]]:
+
+    ids = list(all_ids)  
+    rng = random.Random(seed)
+    rng.shuffle(ids)
+
+    n_total = len(ids)
+    n_train = int(train_frac * n_total)
+    n_val = int(val_frac * n_total)
+
+    train_ids = ids[:n_train]
+    val_ids = ids[n_train : n_train + n_val]
+    test_ids = ids[n_train + n_val :]
+
+    assert not (set(train_ids) & set(val_ids))
+    assert not (set(train_ids) & set(test_ids))
+    assert not (set(val_ids) & set(test_ids))
+
+    return train_ids, val_ids, test_ids
+
+
 def train_tabular_input_autoencoder(
-    model,
-    train_loader,
-    val_loader=None,
-    num_epochs=50,
-    lr=1e-4,
-    lambda_tabular=0.5,
-    device="cuda",
-    use_amp=True,
-    phase_name="train",
+    model: nn.Module,
+    train_loader: DataLoader,
+    val_loader: DataLoader | None = None,
+    num_epochs: int = 50,
+    lr: float = 1e-4,
+    lambda_tabular: float = 0.5,
+    device: str = "cuda",
+    use_amp: bool = True,
+    phase_name: str = "train",
     weights_dir: str = "weights_tabular_input_ae",
-):
+) -> nn.Module:
     optimizer = optim.Adam(model.parameters(), lr=lr)
     scaler = GradScaler(enabled=use_amp)
 
@@ -53,7 +80,6 @@ def train_tabular_input_autoencoder(
         recon_sum = womac_sum = jsn_sum = surg_sum = 0.0
 
         pbar = tqdm(train_loader, desc=f"[{phase_name}] Epoch {epoch}/{num_epochs}")
-
         for x, tab_x, y in pbar:
             x = x.to(device, non_blocking=True)
             tab_x = tab_x.to(device, non_blocking=True)
@@ -84,7 +110,7 @@ def train_tabular_input_autoencoder(
             jsn_sum += loss_jsn.item()
             surg_sum += loss_surg.item()
 
-        n = len(train_loader)
+        n = max(len(train_loader), 1)
         print(
             f"[{phase_name} Epoch {epoch}] "
             f"Train: recon={recon_sum/n:.6f}, "
@@ -121,12 +147,11 @@ def train_tabular_input_autoencoder(
                     jsn_sum += loss_jsn.item()
                     surg_sum += loss_surg.item()
 
-            n = len(val_loader)
+            n = max(len(val_loader), 1)
             val_recon = recon_sum / n
             val_womac = womac_sum / n
             val_jsn = jsn_sum / n
             val_surg = surg_sum / n
-
             val_loss = val_recon + lambda_tabular * (val_womac + val_jsn + val_surg)
 
             print(
@@ -158,25 +183,56 @@ def main():
     batch_size = 8
     num_workers = 8
     num_epochs = 50
+    lr = 1e-4
     lambda_tabular = 0.5
-
     weights_dir = "weights_tabular_input_ae"
+
+    train_frac = 0.70
+    val_frac = 0.15
+    seed = 42  
 
     device = get_device()
     is_cuda = device == "cuda"
 
+
+    master = KneeMRITabularDataset(
+        root=data_root,
+        clinical_csv_path=clinical_csv_path,
+        patient_ids=None,  
+        side=side,
+        require_all_targets=True,
+        require_all_inputs=True,
+    )
+    all_ids = sorted(master.patient_ids)
+
+    # Split ids disjointly 
+    train_ids, val_ids, test_ids = split_ids_disjoint(
+        all_ids=all_ids,
+        train_frac=train_frac,
+        val_frac=val_frac,
+        seed=seed,
+    )
+
+    # Persist test ids for inference later 
+    out_dir = os.path.join(PROJECT_ROOT, "test_ids")
+    write_test_ids(test_ids=test_ids, side=side, out_dir=out_dir)
+
+    # Create datasets from the fixed ids 
     train_set = KneeMRITabularDataset(
         root=data_root,
         clinical_csv_path=clinical_csv_path,
+        patient_ids=train_ids,
         side=side,
-        split="train",
+        require_all_targets=True,
+        require_all_inputs=True,
     )
-
     val_set = KneeMRITabularDataset(
         root=data_root,
         clinical_csv_path=clinical_csv_path,
+        patient_ids=val_ids,
         side=side,
-        split="val",
+        require_all_targets=True,
+        require_all_inputs=True,
     )
 
     train_loader = DataLoader(
@@ -186,7 +242,6 @@ def main():
         num_workers=num_workers if is_cuda else 0,
         pin_memory=is_cuda,
     )
-
     val_loader = DataLoader(
         val_set,
         batch_size=1,
@@ -208,7 +263,7 @@ def main():
         train_loader=train_loader,
         val_loader=val_loader,
         num_epochs=num_epochs,
-        lr=1e-4,
+        lr=lr,
         lambda_tabular=lambda_tabular,
         device=device,
         use_amp=is_cuda,
