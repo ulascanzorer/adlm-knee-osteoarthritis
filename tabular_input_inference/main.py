@@ -24,6 +24,40 @@ def load_features_npz(features_dir: str, side: str) -> tuple[np.ndarray, np.ndar
     return data["ids"], data["features"]
 
 
+def save_features_npz(features_dir: str, side: str, ids: np.ndarray, features: np.ndarray) -> str:
+    os.makedirs(features_dir, exist_ok=True)
+    feat_path = os.path.join(features_dir, f"features_{side}.npz")
+    np.savez(feat_path, ids=ids, features=features)
+    return feat_path
+
+
+def read_test_ids(side: str) -> set[str]:
+    path = os.path.join(PROJECT_ROOT, "test_ids", f"tab_input_ae_{side}.txt")
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Test-IDs file not found for side={side}: {path}")
+    with open(path, "r", encoding="utf-8") as f:
+        return {line.strip() for line in f if line.strip()}
+
+
+def split_features_by_test_ids(
+    ids: np.ndarray,
+    features: np.ndarray,
+    test_ids: set[str],
+) -> tuple[tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]]:
+    ids_str = np.array([str(x) for x in ids])
+
+    is_test = np.array([pid in test_ids for pid in ids_str], dtype=bool)
+    is_non_test = ~is_test
+
+    test_ids_arr = ids_str[is_test]
+    test_feat_arr = features[is_test]
+
+    non_test_ids_arr = ids_str[is_non_test]
+    non_test_feat_arr = features[is_non_test]
+
+    return (test_ids_arr, test_feat_arr), (non_test_ids_arr, non_test_feat_arr)
+
+
 def run_clustering(features_dir: str, csv_dir: str, side: str, k: int = 5):
     ids, features = load_features_npz(features_dir, side)
     patients_features = {str(pid): features[i] for i, pid in enumerate(ids)}
@@ -118,9 +152,6 @@ def main() -> None:
     print(f"Weights: {weights_path}")
 
     results_dir = os.path.join("results", "tabular_input_ae")
-    features_dir = os.path.join(results_dir, "features")
-    csv_dir = os.path.join(results_dir, "csv")
-    plots_dir = os.path.join(results_dir, "plots")
     os.makedirs(results_dir, exist_ok=True)
 
     sides = ["left", "right"] if args.side == "both" else [args.side]
@@ -128,30 +159,56 @@ def main() -> None:
     for side in sides:
         print(f"\n=== SIDE: {side} ===")
 
-        # 1) Inference → save features_<side>.npz
+        features_dir_all = os.path.join(results_dir, "features")
         run_inference(
             data_root=args.data_root,
             clinical_csv_path=args.clinical_csv,
             side=side,
             weights_path=weights_path,
             max_patients=args.max_patients,
-            features_dir=features_dir,
+            features_dir=features_dir_all,
         )
 
-        # 2) Clustering
-        run_clustering(features_dir=features_dir, csv_dir=csv_dir, side=side, k=args.k)
+        #  Split into TEST vs NON-TEST using saved holdout IDs
+        test_ids = read_test_ids(side=side)
+        ids_all, feats_all = load_features_npz(features_dir_all, side)
 
-        # 3) Stats
-        run_stats(csv_dir=csv_dir, clinical_csv=args.clinical_csv, side=side)
-
-        # 4) t-SNE
-        run_tsne(
-            features_dir=features_dir,
-            csv_dir=csv_dir,
-            plots_dir=plots_dir,
-            side=side,
-            n_components=args.tsne_components,
+        (ids_test, feats_test), (ids_non_test, feats_non_test) = split_features_by_test_ids(
+            ids=ids_all,
+            features=feats_all,
+            test_ids=test_ids,
         )
+
+        subsets = [
+            ("test", ids_test, feats_test),
+            ("non_test", ids_non_test, feats_non_test),
+        ]
+
+        for subset_name, subset_ids, subset_feats in subsets:
+            subset_root = os.path.join(results_dir, subset_name)
+            features_dir = os.path.join(subset_root, "features")
+            csv_dir = os.path.join(subset_root, "csv")
+            plots_dir = os.path.join(subset_root, "plots")
+            os.makedirs(subset_root, exist_ok=True)
+
+            save_features_npz(features_dir, side, subset_ids, subset_feats)
+
+            print(f"\n--- SUBSET: {subset_name} ({len(subset_ids)} patients) ---")
+
+            # Clustering
+            run_clustering(features_dir=features_dir, csv_dir=csv_dir, side=side, k=args.k)
+
+            # Stats
+            run_stats(csv_dir=csv_dir, clinical_csv=args.clinical_csv, side=side)
+
+            # t-SNE
+            run_tsne(
+                features_dir=features_dir,
+                csv_dir=csv_dir,
+                plots_dir=plots_dir,
+                side=side,
+                n_components=args.tsne_components,
+            )
 
 
 if __name__ == "__main__":

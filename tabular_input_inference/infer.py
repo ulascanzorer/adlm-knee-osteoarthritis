@@ -10,7 +10,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
-from tabular_input_inference.data import iter_mri_dataset_with_tabular_inputs, TAB_INPUTS_L, TAB_INPUTS_R
+from tabular_input_inference.data import iter_mri_dataset_with_tabular_inputs, TAB_INPUTS
 
 
 def build_feature_extractor(weights_path: str, device: torch.device, side: str) -> nn.Module:
@@ -19,7 +19,7 @@ def build_feature_extractor(weights_path: str, device: torch.device, side: str) 
     """
     from ae_tabular_input.model import build_tabular_input_ae
 
-    num_tabular_inputs = len(TAB_INPUTS_L) if side == "left" else len(TAB_INPUTS_R)
+    num_tabular_inputs = len(TAB_INPUTS)
 
     model = build_tabular_input_ae(
         pretrained_ae_path=None,
