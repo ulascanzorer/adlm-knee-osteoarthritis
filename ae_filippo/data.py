@@ -95,7 +95,6 @@ def iter_mri_dataset(dataset_root, side="left", max_patients=None):
     if max_patients is not None:
         all_patients = all_patients[:max_patients]
 
-    from tqdm import tqdm
     pbar = tqdm(all_patients, desc=f"Loading {side} MRI volumes", unit="patient")
 
     count = 0

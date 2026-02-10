@@ -82,10 +82,6 @@ def train_autoencoder(
             val_loss = val_loss_sum / len(val_loader)
             print(f"[Epoch {epoch}] Val Loss: {val_loss:.6f}")
 
-            if use_wandb:
-                import wandb
-                wandb.log({"val_loss": val_loss})
-
             scheduler.step(val_loss)
 
             if val_loss < best_val_loss:
