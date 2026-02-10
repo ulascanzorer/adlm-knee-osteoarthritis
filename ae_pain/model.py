@@ -7,7 +7,7 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.append(PROJECT_ROOT)
 
-from ae_filippo.model import Autoencoder3D
+from first_ae.model import Autoencoder3D
 
 
 class PainHead(nn.Module):

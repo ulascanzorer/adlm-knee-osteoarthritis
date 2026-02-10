@@ -46,7 +46,7 @@ def build_feature_extractor(
 
     elif model_name == "autoencoder":
         
-        from ae_filippo.model import Autoencoder3D
+        from first_ae.model import Autoencoder3D
 
         ae = Autoencoder3D()
         state_dict = torch.load(weights_path, map_location=device)

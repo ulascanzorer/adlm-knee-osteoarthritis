@@ -13,7 +13,7 @@ This repository contains various autoencoder implementations and inference pipel
 
 ### Training Directories
 
-- **`ae_filippo/`** - Autoencoder training code for 3D imaging using Filippo's architecture, with separate modules for depth processing and Fourier analysis.
+- **`first_ae/`** - Autoencoder training code for 3D imaging using Filippo's architecture, with separate modules for depth processing and Fourier analysis.
 - **`ae_pain/`** - Autoencoder training implementation specifically for pain-related prediction, containing dataset and model definitions.
 - **`ae_tabular_input/`** - Autoencoder architecture that integrates tabular clinical data with imaging, designed for hybrid input modeling.
 - **`ae_tabular_input_masked/`** - Variant of tabular input autoencoder with masking support, likely for handling missing data or selective attention during training.

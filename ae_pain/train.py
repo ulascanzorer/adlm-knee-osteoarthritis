@@ -16,8 +16,8 @@ if PROJECT_ROOT not in sys.path:
 
 from ae_pain.dataset import KneeMRIPainDataset
 from ae_pain.model import build_pain_ae
-from ae_filippo.save import save_reconstruction
-from ae_filippo.data_t import KneeMRIDataset as PlainMRIDataset
+from first_ae.save import save_reconstruction
+from first_ae.data_t import KneeMRIDataset as PlainMRIDataset
 
 
 def get_device():

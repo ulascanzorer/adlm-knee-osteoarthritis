@@ -34,6 +34,6 @@ echo
 
 echo "STARTING TRAINING JOB"
 echo "Running train.py..."
-python ae_filippo/train.py
+python first_ae/train.py
 
 echo "Training DONE"
