@@ -1,14 +1,14 @@
 ```mermaid
 graph LR
     %% Styling for different components
-    classDef encoder fill:#4A90E2,stroke:#000000,stroke-width:2px,color:#000
-    classDef decoder fill:#27AE60,stroke:#000000,stroke-width:2px,color:#000
-    classDef latent fill:#d86f13,stroke:#000000,stroke-width:3px,color:#000
-    classDef input fill:#95A5A6,stroke:#000000,stroke-width:4px,color:#000
-    classDef pain fill:#ff0000,stroke:#000000,stroke-width:4px,color:#000
-    classDef truepain fill:#00ff00,stroke:#000000,stroke-width:4px,color:#000
-    classDef loss fill:#d84d4d,stroke:#000000,stroke-width:3px,color:#000
-    classDef combine fill:#9B59B6,stroke:#000000,stroke-width:3px,color:#000
+    classDef encoder fill:#0065BD,stroke:#003359,stroke-width:1px,color:#fff
+    classDef decoder fill:#0065BD,stroke:#003359,stroke-width:1px,color:#fff
+    classDef latent fill:#E5E5E5,stroke:#0065BD,stroke-width:2px,color:#000
+    classDef input fill:#FFFFFF,stroke:#333333,stroke-width:1px,color:#000
+    classDef pain fill:#FFFFFF,stroke:#333333,stroke-width:1px,color:#000
+    classDef truepain fill:#FFFFFF,stroke:#333333,stroke-width:1px,color:#000
+    classDef loss fill:#005293,stroke:#003359,stroke-width:1px,color:#fff
+    classDef combine fill:#E5E5E5,stroke:#0065BD,stroke-width:2px,color:#000
     
     %% Input Layers
     MRIInput["MRI Image<br/>160x224x224"]
