@@ -21,4 +21,3 @@ This repository contains various autoencoder implementations and inference pipel
 - **`recon_samples_50/`** - Sample reconstruction outputs from autoencoder models with 50 iterations/epochs displayed as PNG images.
 ### Documentation and Utilities
 - **`architecture_mermaid_files/`** - Contains Mermaid diagram files documenting the architecture designs of various autoencoder models.
-- **`scripts/`** - Utility scripts for visualizing enrollee/patient demographic and clinical data.
