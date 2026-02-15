@@ -19,5 +19,5 @@ This repository contains various autoencoder implementations and inference pipel
 - **`results/`** - Main output directory storing trained model artifacts, MRI results, reconstructions, and comparative analysis results.
 - **`recon_samples_20/`** - Sample reconstruction outputs from autoencoder models with 20 iterations/epochs displayed as PNG images.
 - **`recon_samples_50/`** - Sample reconstruction outputs from autoencoder models with 50 iterations/epochs displayed as PNG images.
-### Documentation and Utilities
+### Documentation
 - **`architecture_mermaid_files/`** - Contains Mermaid diagram files documenting the architecture designs of various autoencoder models.
