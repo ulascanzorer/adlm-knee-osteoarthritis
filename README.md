@@ -24,3 +24,70 @@ This repository contains various autoencoder implementations and inference pipel
 - **`recon_samples_50/`** - Sample reconstruction outputs from autoencoder models with 50 iterations/epochs displayed as PNG images.
 ### Documentation
 - **`architecture_mermaid_files/`** - Contains Mermaid diagram files documenting the architecture designs of various autoencoder models.
+
+## Loss Functions
+
+Each model uses a composite loss that combines a reconstruction term with one or more supervised prediction terms. The prediction terms are scaled by a weighting factor `lambda` (default `0.5`, except `ae_pain` which uses `5.0`).
+
+### `ae_filippo` — Simple Autoencoder
+
+| Component | Function | Notes |
+|-----------|----------|-------|
+| Reconstruction | `MSELoss` | Pixel-wise mean squared error between input and output |
+
+**Total loss:**
+```
+loss = MSE(x_hat, x)
+```
+
+---
+
+### `ae_pain` — Pain-Prediction Autoencoder
+
+| Component | Function | Notes |
+|-----------|----------|-------|
+| Reconstruction | `MSELoss` | Pixel-wise MSE between input and reconstructed volume |
+| Pain prediction | `MSELoss` | Regression on KOOS Pain Score (continuous) |
+
+**Total loss:**
+```
+loss = loss_recon + lambda_pain * loss_pain      (lambda_pain = 5.0)
+```
+
+Training is split into two phases:
+1. **Phase 1 (warm-up):** Encoder and decoder are frozen; only the pain-prediction head is trained (`lr=1e-3`, 5 epochs).
+2. **Phase 2 (fine-tuning):** All parameters are unfrozen and trained jointly (`lr=1e-5`, 20 epochs).
+
+---
+
+### `ae_tabular_input` — Tabular-Input Autoencoder
+
+| Component | Function | Notes |
+|-----------|----------|-------|
+| Reconstruction | `mse_loss` | Pixel-wise MSE |
+| WOMAC score | `mse_loss` | Continuous regression |
+| JSN grade | `cross_entropy` | 4-class classification (grades 0–3) |
+| Surgery risk | `binary_cross_entropy_with_logits` | Binary classification |
+
+**Total loss:**
+```
+loss = loss_recon + lambda_tabular * (loss_womac + loss_jsn + loss_surg)      (lambda_tabular = 0.5)
+```
+
+---
+
+### `ae_tabular_input_masked` — Masked Tabular-Input Autoencoder
+
+Same prediction heads and reconstruction term as `ae_tabular_input`, but the supervised losses are computed only over samples for which the target label is actually present (masked losses). Additionally, **tabular dropout** (`p=0.2`) is applied during training, randomly zeroing out individual tabular input features to simulate missing data.
+
+| Component | Function | Notes |
+|-----------|----------|-------|
+| Reconstruction | `mse_loss` | Pixel-wise MSE (always applied) |
+| WOMAC score | masked `mse_loss` | Only over samples where target is available |
+| JSN grade | masked `cross_entropy` | Only over samples where target is available |
+| Surgery risk | masked `binary_cross_entropy_with_logits` | Only over samples where target is available |
+
+**Total loss:**
+```
+loss = loss_recon + lambda_tabular * (loss_womac + loss_jsn + loss_surg)      (lambda_tabular = 0.5)
+```
