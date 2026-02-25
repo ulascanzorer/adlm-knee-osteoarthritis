@@ -112,6 +112,92 @@ The architecture diagram is available in [`architecture_mermaid_files/autoencode
 
 ---
 
+## How Masking Works
+
+`ae_tabular_input_masked` uses three distinct masking mechanisms that work together to let the model train and run inference even when clinical data are partially missing.
+
+### 1. Input feature mask (`tab_mask`)
+
+**Where:** `ae_tabular_input_masked/dataset.py` → `_build_tab()`
+
+When loading tabular inputs for a patient, the dataset inspects each clinical feature. If the value is present it is normalized and stored; if it is missing (NaN or empty string) a placeholder `0.0` is stored instead. A parallel binary mask vector records which entries are real:
+
+```
+feature present  →  tab_x[i] = normalized_value,  tab_mask[i] = 1.0
+feature missing  →  tab_x[i] = 0.0,               tab_mask[i] = 0.0
+```
+
+Both `tab_x` and `tab_mask` (each of shape `(T,)`) are returned by the dataset and passed to the model together. The tabular encoder concatenates them before the first linear layer:
+
+```
+TabularEncoder input = cat([tab_x, tab_mask], dim=1)   # shape (B, 2T)
+→ Linear(2T → 32) → ReLU → Linear(32 → 4)
+```
+
+This means the encoder always receives an explicit signal indicating which features are absent, allowing it to learn a meaningful embedding even with partial data.
+
+### 2. Target label mask (`y_mask`)
+
+**Where:** `ae_tabular_input_masked/dataset.py` → `_build_tab()` (called for targets), `ae_tabular_input_masked/train.py` → `masked_mse / masked_ce / masked_bce`
+
+The same masking logic is applied to the three prediction targets (WOMAC score, JSN grade, surgery label). The dataset returns a `y_mask` tensor alongside `y`:
+
+```
+target present  →  y[i] = normalized_value,  y_mask[i] = 1.0
+target missing  →  y[i] = 0.0,              y_mask[i] = 0.0
+```
+
+During training, each prediction head uses a custom masked loss that only accumulates gradient contributions from samples where the label is actually available:
+
+```python
+# masked MSE (WOMAC regression)
+def masked_mse(pred, target, mask):
+    diff = (pred - target) ** 2
+    return (diff * mask).sum() / (mask.sum() + 1e-8)
+
+# masked cross-entropy (JSN 4-class)
+def masked_ce(logits, target, mask):
+    loss = cross_entropy(logits, target, reduction="none")
+    return (loss * mask).sum() / (mask.sum() + 1e-8)
+
+# masked BCE-with-logits (surgery binary)
+def masked_bce(logits, target, mask):
+    loss = binary_cross_entropy_with_logits(logits, target, reduction="none")
+    return (loss * mask).sum() / (mask.sum() + 1e-8)
+```
+
+The `+ 1e-8` denominator prevents division by zero in the edge case where an entire batch has no label for a given target.
+
+### 3. Tabular dropout (training-time augmentation)
+
+**Where:** `ae_tabular_input_masked/train.py` → `apply_tabular_dropout()`
+
+To make the model robust to missing inputs at inference time, additional random feature dropout is applied *only during training* with probability `p=0.2`. For each sample in the batch, each present feature is independently zeroed out with probability `p`, and its mask entry is also set to `0`:
+
+```python
+def apply_tabular_dropout(tab_x, tab_mask, p=0.2):
+    drop = (torch.rand_like(tab_mask) < p).float()
+    drop = drop * tab_mask        # only drop features that are actually present
+    tab_mask = tab_mask * (1.0 - drop)
+    tab_x   = tab_x   * tab_mask
+    return tab_x, tab_mask
+```
+
+Key properties:
+- Features that are already missing (`tab_mask[i] = 0`) are **never** additionally dropped (the `drop * tab_mask` line ensures this).
+- The dropped mask is passed to the model, so the encoder sees `mask=0` for both genuinely missing and artificially dropped features — the model cannot distinguish them.
+- Dropout is **not** applied during validation or inference, where the real availability masks are used directly.
+
+### Summary
+
+| Mechanism | Where produced | Where consumed | Purpose |
+|-----------|---------------|----------------|---------|
+| Input mask `tab_mask` | `dataset._build_tab(tab_inputs)` | `TabularEncoder` (concatenated with values) | Tell the encoder which input features are absent |
+| Target mask `y_mask` | `dataset._build_tab(targets)` | `masked_mse`, `masked_ce`, `masked_bce` | Exclude missing labels from the prediction loss |
+| Tabular dropout | `apply_tabular_dropout()` in training loop | Replaces `tab_x`/`tab_mask` before the forward pass | Simulate missing inputs to improve robustness |
+
+---
+
 ## Loss Functions
 
 Each model uses a composite loss that combines a reconstruction term with one or more supervised prediction terms. The prediction terms are scaled by a weighting factor `lambda` (default `0.5`, except `ae_pain` which uses `5.0`).
