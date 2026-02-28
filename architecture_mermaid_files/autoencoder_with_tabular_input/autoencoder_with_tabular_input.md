@@ -1,12 +1,12 @@
 ```mermaid
 graph LR
     %% Styling for different components
-    classDef encoder fill:#4A90E2,stroke:#000000,stroke-width:2px,color:#fff
-    classDef decoder fill:#27AE60,stroke:#000000,stroke-width:2px,color:#fff
-    classDef latent fill:#d86f13,stroke:#000000,stroke-width:2px,color:#fff
-    classDef input fill:#95A5A6,stroke:#000000,stroke-width:2px,color:#000
-    classDef head fill:#9B59B6,stroke:#000000,stroke-width:2px,color:#fff
-    classDef operation fill:#FF7F50,stroke:#000000,stroke-width:2px,color:#fff
+    classDef encoder fill:#0065BD,stroke:#003359,stroke-width:1px,color:#fff
+    classDef decoder fill:#0065BD,stroke:#003359,stroke-width:1px,color:#fff
+    classDef latent fill:#E5E5E5,stroke:#0065BD,stroke-width:2px,color:#000
+    classDef input fill:#FFFFFF,stroke:#333333,stroke-width:1px,color:#000
+    classDef head fill:#005293,stroke:#003359,stroke-width:1px,color:#fff
+    classDef operation fill:#64A0C8,stroke:#003359,stroke-width:1px,color:#fff
 
     %% Input Layers
     MRIInput("MRI Input<br/>160x224x224"):::input
