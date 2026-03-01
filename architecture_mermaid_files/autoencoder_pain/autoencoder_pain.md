@@ -23,19 +23,19 @@ graph LR
     Output["Reconstructed MRI Image<br/>160x224x224"]
     
     %% Latent Space (Bottleneck)
-    Latent{{"Latent Space<br/>Shape: (64,)"}}
+    Latent{{"Latent Space<br/> C = 64"}}
 
     %% Fully Connected Layer
-    FC["Fully Connected Layer"]
+    FC["KOOS Pain Head<br/>(AvgPool -> Linear)"]
 
     %% Predicted Pain Layer
-    Pain["Predicted Pain Level"]
+    Pain["Predicted KOOS Pain"]
 
     %% Real Pain Layer
-    TruePain["True Pain Level"]
+    TruePain["KOOS Pain Ground Truth"]
 
     %% Pain Loss
-    PainLoss["Pain Loss"]
+    PainLoss["KOOS Pain Loss"]
 
     %% Reconstruction Loss
     ReconLoss["Reconstruction Loss"]
